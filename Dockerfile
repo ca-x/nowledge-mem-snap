@@ -1,12 +1,12 @@
-FROM node:26-alpine AS web-builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS web-builder
 
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
-RUN npm ci
+RUN npm ci --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 ARG VERSION=dev
 ARG BUILD_TIME
