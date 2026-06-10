@@ -36,10 +36,11 @@ docker compose up -d
 
 Open `http://localhost:14335`. If no admin env vars are set, the setup wizard creates the first administrator.
 
-Published images are built by GitHub Actions and pushed to GitHub Container Registry:
+Published images are built by GitHub Actions and pushed to Docker Hub and GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/lib-x/nowledge-mem-snap:latest
+docker pull czyt/nowledge-mem-snap:latest
+docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 ```
 
 Image tags:
@@ -127,7 +128,8 @@ The web UI provides pages for profile, sources, targets, schedules, tasks, run h
 ## GitHub Actions
 
 - `.github/workflows/ci.yml`: installs Node/Go dependencies, builds the embedded web UI, verifies generated ent code, runs Go tests, and builds all Go packages.
+- `.github/workflows/binary.yml`: builds standalone binaries for Linux, Windows, and macOS. Version tags create a draft GitHub release and upload binary archives.
 - `.github/workflows/docker.yml`: builds multi-arch Docker images for `linux/amd64` and `linux/arm64`.
-  - Push to `main`: builds and pushes `latest`, `main`, and `sha-<commit>` to GHCR.
+  - Push to `main`: builds and pushes `latest`, `main`, and `sha-<commit>` to Docker Hub and GHCR.
   - Push tag `v*`: builds and pushes semantic version tags.
   - Pull request: builds the image for verification but does not push.
