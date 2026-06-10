@@ -1,0 +1,48 @@
+services:
+  nowledge-mem-snap:
+    build: .
+    image: nowledge-mem-snap:latest
+    container_name: nowledge-mem-snap
+    restart: unless-stopped
+    ports:
+      - "14335:14335"
+    volumes:
+      - snap-data:/app/data
+      # Optional operator-level directory snapshot sources for Nowledge Mem Docker:
+      # - ./data:/mem-data:ro
+      # - ./config:/mem-config:ro
+    environment:
+      - PORT=14335
+      - TZ=UTC
+      # Optional database override. Default is /app/data/data.db.
+      # - NMEM_SNAP_DATABASE_URL=file:/app/data/data.db?cache=shared&_pragma=foreign_keys(1)
+      # Bootstrap first admin automatically; omit these to use the setup wizard.
+      # - NMEM_SNAP_ADMIN_USERNAME=admin
+      # - NMEM_SNAP_ADMIN_PASSWORD=change-me
+      # - NMEM_SNAP_SESSION_SECRET=change-this-session-secret
+      # Default local Nowledge Mem API source:
+      # - NMEM_API_URL=http://host.docker.internal:14242
+      # - NMEM_API_KEY=nmem_xxx
+      # Directory sources are disabled unless explicit roots are listed:
+      # - NMEM_SNAP_ALLOWED_SOURCE_ROOTS=mem-data=/mem-data,mem-config=/mem-config
+      # Optional OIDC:
+      # - NMEM_SNAP_OIDC_ENABLED=true
+      # - NMEM_SNAP_OIDC_ISSUER_URL=https://issuer.example.com
+      # - NMEM_SNAP_OIDC_CLIENT_ID=nowledge-mem-snap
+      # - NMEM_SNAP_OIDC_CLIENT_SECRET=secret
+      # - NMEM_SNAP_OIDC_REDIRECT_URL=http://localhost:14335/auth/oidc/callback
+      # Rotating file logs. Use NMEM_SNAP_LOG_FILE=stdout to disable file logging.
+      # - NMEM_SNAP_LOG_FILE=/app/data/logs/nowledge-mem-snap.log
+      # - NMEM_SNAP_LOG_MAX_SIZE_MB=20
+      # - NMEM_SNAP_LOG_MAX_BACKUPS=7
+      # - NMEM_SNAP_LOG_MAX_AGE_DAYS=30
+      # - NMEM_SNAP_LOG_COMPRESS=true
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:14335/healthz"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  snap-data:

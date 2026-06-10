@@ -27,6 +27,23 @@ go.work.sum
 # env file
 .env
 
+# Frontend dependency/build output
+web/node_modules/
+web/dist/
+web/.vite/
+web/tsconfig.tsbuildinfo
+
+# Local app data and logs
+data/
+logs/
+*.db
+*.db-*
+*.log
+
+# Build output
+dist/
+nowledge-mem-snap
+
 # Editor/IDE
 # .idea/
 # .vscode/

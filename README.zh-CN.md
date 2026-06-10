@@ -1,0 +1,133 @@
+# Nowledge Mem Snap
+
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+Nowledge Mem Snap 是一个自托管的 Nowledge Mem 备份服务。
+
+它可以把每个登录用户自己的备份配置同步到 S3 兼容存储和 WebDAV。推荐 source 是 Nowledge Mem 官方 Data Transfer API 导出的可移植 ZIP；目录 source 主要用于 Docker 场景下的运维级目录快照，并且只能访问显式允许的挂载根目录。
+
+## 功能
+
+- 多用户隔离：source、target、task、运行历史按用户/租户隔离。
+- 配置全部存数据库，用户通过 Web UI 表单管理，不需要编辑本地 JSON 配置文件。
+- 首次启动设置向导；也支持通过环境变量初始化管理员。
+- 密码登录和可选 OIDC 登录。
+- 用户资料：昵称、头像 URL、上传图片自动转 base64 存库。
+- Source：
+  - `nowledgemem_api`：通过 `github.com/lib-x/nowledgemem-go` 导出 Nowledge Mem 可移植 ZIP。
+  - `directory`：压缩允许目录，适合挂载 Nowledge Mem Docker 的 `data` / `config` 目录做运维快照。
+- 远程 Nowledge Mem source 和目录 source 都可以在 UI 里点击按钮测试。
+- Target：
+  - S3/R2 兼容存储，基于 `github.com/fclairamb/afero-s3`。
+  - WebDAV，基于 `github.com/lib-x/aferodav` 和本项目的 HTTP WebDAV 适配。
+- 定时任务：支持每天、每周。
+- 每个任务可选 AES-GCM 加密备份包。
+- 每个任务可配置远端备份清理策略：不清理、保留最近 N 份、保留最近 N 天、保留某日期之后、保留某日期之前。
+- 运行历史按条数和天数自动清理，避免数据库无限膨胀。
+- 使用 `slog` 输出结构化日志，并通过 lumberjack 写文件和自动轮转。
+- 嵌入式 React UI，使用 `animal-island-ui`。
+- 使用 ent ORM，默认 SQLite 数据库，风格对齐 `cfui` 的 `entsqlite` 用法。
+
+## Docker
+
+```bash
+docker compose up -d
+```
+
+打开 `http://localhost:14335`。如果没有设置管理员初始化环境变量，程序会进入设置向导创建第一个管理员。
+
+GitHub Actions 会自动构建并推送镜像到 GitHub Container Registry：
+
+```bash
+docker pull ghcr.io/lib-x/nowledge-mem-snap:latest
+```
+
+镜像标签规则：
+
+- `latest`：默认分支推送时生成。
+- `main`：`main` 分支推送时生成。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.0`。
+- `sha-<commit>`：不可变的 commit 镜像。
+
+常用环境变量：
+
+```bash
+DATA_DIR=/app/data
+PORT=14335
+NMEM_SNAP_DATABASE_URL=
+
+# 可选：自动初始化第一个管理员。留空则使用页面设置向导。
+NMEM_SNAP_ADMIN_USERNAME=admin
+NMEM_SNAP_ADMIN_PASSWORD=change-me
+NMEM_SNAP_SESSION_SECRET=change-this-session-secret
+
+# 默认 Nowledge Mem API source。
+NMEM_API_URL=http://host.docker.internal:14242
+NMEM_API_KEY=nmem_xxx
+
+# 目录 source 默认禁用，必须显式列出允许根目录。
+NMEM_SNAP_ALLOWED_SOURCE_ROOTS=mem-data=/mem-data,mem-config=/mem-config
+
+# 可选 OIDC。
+NMEM_SNAP_OIDC_ENABLED=true
+NMEM_SNAP_OIDC_ISSUER_URL=https://issuer.example.com
+NMEM_SNAP_OIDC_CLIENT_ID=nowledge-mem-snap
+NMEM_SNAP_OIDC_CLIENT_SECRET=secret
+NMEM_SNAP_OIDC_REDIRECT_URL=http://localhost:14335/auth/oidc/callback
+NMEM_SNAP_OIDC_ALLOWED_DOMAINS=example.com
+
+# 日志轮转。默认文件是 DATA_DIR/logs/nowledge-mem-snap.log。
+NMEM_SNAP_LOG_LEVEL=info
+NMEM_SNAP_LOG_FILE=/app/data/logs/nowledge-mem-snap.log
+NMEM_SNAP_LOG_MAX_SIZE_MB=20
+NMEM_SNAP_LOG_MAX_BACKUPS=7
+NMEM_SNAP_LOG_MAX_AGE_DAYS=30
+NMEM_SNAP_LOG_COMPRESS=true
+```
+
+如果要备份 Nowledge Mem 官方 Docker 部署目录，可以只读挂载它的宿主机目录：
+
+```yaml
+volumes:
+  - ./data:/mem-data:ro
+  - ./config:/mem-config:ro
+environment:
+  - NMEM_SNAP_ALLOWED_SOURCE_ROOTS=mem-data=/mem-data,mem-config=/mem-config
+```
+
+建议优先使用 API source 做应用级可移植导出，适合跨版本、跨架构恢复。目录 source 更适合运维级目录快照。
+
+远端对象位置分两层：
+
+- Target `root_prefix`：bucket 或 WebDAV 账号下的远端根目录/前缀。
+- Task `object_prefix`：该任务自己的对象路径模板，例如 `nowledge-mem/{task}/{timestamp}`。
+
+自动清理远端备份时，只会扫描 `target.root_prefix + task.object_prefix` 推导出的稳定任务目录，并且只删除 `.zip` 或 `.zip.aes.json` 备份对象，不会扫描整个 bucket 或 WebDAV 根目录。
+
+## 本地开发
+
+```bash
+npm --prefix web ci
+npm --prefix web run build
+go generate ./internal/persist/ent
+go test ./...
+go run .
+```
+
+命令行单次备份：
+
+```bash
+go run . backup <tenant> <task>
+```
+
+默认数据库是 `DATA_DIR/data.db`。可以通过 `NMEM_SNAP_DATABASE_URL` 或 `DATABASE_URL` 覆盖 DSN。
+
+Web UI 提供用户资料、source、target、schedule、task、运行历史和保留策略设置页面。用户不需要编辑原始 JSON 配置。
+
+## GitHub Actions
+
+- `.github/workflows/ci.yml`：安装 Node/Go 依赖，构建嵌入式前端，校验 ent 生成代码，运行 Go 测试，并构建 Go 包。
+- `.github/workflows/docker.yml`：构建 `linux/amd64` 和 `linux/arm64` 多架构 Docker 镜像。
+  - 推送到 `main`：自动构建并推送 `latest`、`main`、`sha-<commit>` 到 GHCR。
+  - 推送 `v*` tag：自动构建并推送语义化版本镜像。
+  - Pull Request：只构建校验，不推送镜像。
