@@ -6,6 +6,16 @@ Self-hosted backup service for Nowledge Mem.
 
 It backs up each logged-in user's private configuration to S3-compatible storage and WebDAV targets. The preferred source is Nowledge Mem's application-level Data Transfer API. Directory sources are supported for operator-managed Docker volume snapshots, but only under explicitly allowed roots.
 
+## Screenshots
+
+Desktop:
+
+![Nowledge Mem Snap desktop UI](screenshot/README-en-pc.png)
+
+Mobile:
+
+![Nowledge Mem Snap mobile UI](screenshot/README-en-mobile.png)
+
 ## Features
 
 - Multi-user isolation: sources, targets, schedules, export options, backup strategies, tasks, and run history are per user.
@@ -16,7 +26,7 @@ It backs up each logged-in user's private configuration to S3-compatible storage
 - Sources:
   - `nowledgemem_api`: portable Mem export ZIP via `github.com/lib-x/nowledgemem-go`.
   - `directory`: ZIP of an allowed directory, intended for mounted Docker volumes.
-- Remote Nowledge Mem sources and directory sources can be tested from the UI before saving.
+- Remote Nowledge Mem sources, directory sources, and S3/WebDAV targets can be tested from the UI before saving.
 - Targets:
   - S3/R2-compatible storage via `github.com/fclairamb/afero-s3`.
   - WebDAV via `github.com/lib-x/aferodav` and an HTTP WebDAV adapter.
@@ -41,13 +51,13 @@ Open `http://localhost:14335`. If no admin env vars are set, the setup wizard cr
 Published images are built by GitHub Actions and pushed to Docker Hub and GitHub Container Registry:
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.4
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.4
+docker pull czyt/nowledge-mem-snap:v0.1.5
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.5
 ```
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.4`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.5`.
 - `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 

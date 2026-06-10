@@ -890,12 +890,7 @@ func MergeUserSecrets(incoming UserConfig, existing UserConfig) UserConfig {
 		if !ok {
 			continue
 		}
-		if incoming.Targets[i].Type == "s3" && incoming.Targets[i].S3.SecretAccessKey == "" {
-			incoming.Targets[i].S3.SecretAccessKey = existingTarget.S3.SecretAccessKey
-		}
-		if incoming.Targets[i].Type == "webdav" && incoming.Targets[i].WebDAV.Password == "" {
-			incoming.Targets[i].WebDAV.Password = existingTarget.WebDAV.Password
-		}
+		incoming.Targets[i] = MergeTargetSecrets(incoming.Targets[i], existingTarget)
 	}
 
 	taskByKey := make(map[string]TaskConfig, len(existing.Tasks))
@@ -914,6 +909,16 @@ func MergeUserSecrets(incoming UserConfig, existing UserConfig) UserConfig {
 func MergeSourceSecrets(incoming SourceConfig, existing SourceConfig) SourceConfig {
 	if incoming.Type == "nowledgemem_api" && incoming.NowledgeMem.APIKey == "" {
 		incoming.NowledgeMem.APIKey = existing.NowledgeMem.APIKey
+	}
+	return incoming
+}
+
+func MergeTargetSecrets(incoming TargetConfig, existing TargetConfig) TargetConfig {
+	if incoming.Type == "s3" && incoming.S3.SecretAccessKey == "" {
+		incoming.S3.SecretAccessKey = existing.S3.SecretAccessKey
+	}
+	if incoming.Type == "webdav" && incoming.WebDAV.Password == "" {
+		incoming.WebDAV.Password = existing.WebDAV.Password
 	}
 	return incoming
 }
@@ -1080,37 +1085,13 @@ func Validate(cfg Config) error {
 	}
 	targetKeys := make(map[string]struct{})
 	for _, target := range cfg.Targets {
-		if err := validateKey("target", target.Key); err != nil {
+		if err := ValidateTargetConfig(target); err != nil {
 			return err
 		}
 		if _, ok := targetKeys[target.Key]; ok {
 			return fmt.Errorf("duplicate target key %q", target.Key)
 		}
 		targetKeys[target.Key] = struct{}{}
-		switch target.Type {
-		case "s3":
-			if strings.TrimSpace(target.S3.EndpointURL) == "" {
-				return fmt.Errorf("target %q s3 endpoint_url is required", target.Key)
-			}
-			if err := validateHTTPURL(target.S3.EndpointURL); err != nil {
-				return fmt.Errorf("target %q s3 endpoint_url: %w", target.Key, err)
-			}
-			if strings.TrimSpace(target.S3.BucketName) == "" {
-				return fmt.Errorf("target %q s3 bucket_name is required", target.Key)
-			}
-			if strings.TrimSpace(target.S3.AccessKeyID) == "" {
-				return fmt.Errorf("target %q s3 access_key_id is required", target.Key)
-			}
-		case "webdav":
-			if strings.TrimSpace(target.WebDAV.URL) == "" {
-				return fmt.Errorf("target %q webdav url is required", target.Key)
-			}
-			if err := validateHTTPURL(target.WebDAV.URL); err != nil {
-				return fmt.Errorf("target %q webdav url: %w", target.Key, err)
-			}
-		default:
-			return fmt.Errorf("target %q type must be s3 or webdav", target.Key)
-		}
 	}
 	exportOptionKeys := make(map[string]struct{})
 	for _, option := range cfg.ExportOptions {
@@ -1161,6 +1142,37 @@ func Validate(cfg Config) error {
 		if _, ok := backupStrategyKeys[task.BackupStrategyKey]; !ok {
 			return fmt.Errorf("task %q references missing backup strategy %q", task.Key, task.BackupStrategyKey)
 		}
+	}
+	return nil
+}
+
+func ValidateTargetConfig(target TargetConfig) error {
+	if err := validateKey("target", target.Key); err != nil {
+		return err
+	}
+	switch target.Type {
+	case "s3":
+		if strings.TrimSpace(target.S3.EndpointURL) == "" {
+			return fmt.Errorf("target %q s3 endpoint_url is required", target.Key)
+		}
+		if err := validateHTTPURL(target.S3.EndpointURL); err != nil {
+			return fmt.Errorf("target %q s3 endpoint_url: %w", target.Key, err)
+		}
+		if strings.TrimSpace(target.S3.BucketName) == "" {
+			return fmt.Errorf("target %q s3 bucket_name is required", target.Key)
+		}
+		if strings.TrimSpace(target.S3.AccessKeyID) == "" {
+			return fmt.Errorf("target %q s3 access_key_id is required", target.Key)
+		}
+	case "webdav":
+		if strings.TrimSpace(target.WebDAV.URL) == "" {
+			return fmt.Errorf("target %q webdav url is required", target.Key)
+		}
+		if err := validateHTTPURL(target.WebDAV.URL); err != nil {
+			return fmt.Errorf("target %q webdav url: %w", target.Key, err)
+		}
+	default:
+		return fmt.Errorf("target %q type must be s3 or webdav", target.Key)
 	}
 	return nil
 }

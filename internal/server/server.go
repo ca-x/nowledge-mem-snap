@@ -16,6 +16,7 @@ import (
 	"github.com/lib-x/nowledge-mem-snap/internal/config"
 	"github.com/lib-x/nowledge-mem-snap/internal/history"
 	"github.com/lib-x/nowledge-mem-snap/internal/source"
+	"github.com/lib-x/nowledge-mem-snap/internal/storage"
 	"github.com/lib-x/nowledge-mem-snap/version"
 )
 
@@ -66,6 +67,7 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("/api/version", s.handleVersion)
 	api.HandleFunc("/api/sources/test", s.handleTestSource)
 	api.HandleFunc("/api/sources/test/download", s.handleDownloadTestSource)
+	api.HandleFunc("/api/targets/test", s.handleTestTarget)
 	api.HandleFunc("/api/runs", s.handleRuns)
 	api.HandleFunc("/api/backup/run", s.handleRunBackup)
 	mux.Handle("/api/", s.auth.Require(api))
@@ -248,6 +250,43 @@ func (s *Server) handleDownloadTestSource(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.logger.Info("source test download finished", "tenant", claims.Tenant, "source", sourceCfg.Key, "type", sourceCfg.Type, "bytes", len(data))
+}
+
+func (s *Server) handleTestTarget(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	var req struct {
+		Target     config.TargetConfig `json:"target"`
+		UploadFile bool                `json:"upload_file"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	targetCfg := req.Target
+	if cfg, err := s.store.LoadUser(claims.Tenant); err == nil {
+		if existing, ok := cfg.Target(targetCfg.Key); ok {
+			targetCfg = config.MergeTargetSecrets(targetCfg, existing)
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+	s.logger.Info("target test started", "tenant", claims.Tenant, "target", targetCfg.Key, "type", targetCfg.Type, "upload_file", req.UploadFile)
+	result := storage.Test(ctx, targetCfg, req.UploadFile)
+	if !result.OK {
+		s.logger.Warn("target test failed", "tenant", claims.Tenant, "target", targetCfg.Key, "type", targetCfg.Type, "upload_file", req.UploadFile, "code", result.Code, "message", result.Message)
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	s.logger.Info("target test finished", "tenant", claims.Tenant, "target", targetCfg.Key, "type", targetCfg.Type, "upload_file", req.UploadFile, "bytes", result.Details["bytes"])
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {

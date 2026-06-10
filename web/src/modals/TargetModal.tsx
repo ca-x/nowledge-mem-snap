@@ -1,9 +1,12 @@
-import { Input, Modal, Radio } from 'animal-island-ui';
+import { useEffect, useState } from 'react';
+import { Button, Checkbox, Input, Modal, Radio } from 'animal-island-ui';
+import { CheckCircle2, ServerCog, XCircle } from 'lucide-react';
 
+import { api } from '../api';
 import { defaultS3, defaultWebDAV } from '../configDefaults';
 import { useI18n } from '../i18n';
-import { Field, FormGrid, ModalFooter, SwitchField } from '../components/ui';
-import type { Editor, S3Config, Target, TargetType, WebDAVConfig } from '../types';
+import { Field, FormGrid, ModalFooter, SwitchField, Tip } from '../components/ui';
+import type { Editor, S3Config, Target, TargetType, TestResult, WebDAVConfig } from '../types';
 
 export function TargetModal({ editor, saving, onChange, onCancel, onSave }: {
   editor: Editor<Target> | null;
@@ -13,8 +16,33 @@ export function TargetModal({ editor, saving, onChange, onCancel, onSave }: {
   onSave: (editor: Editor<Target>) => void;
 }) {
   const { t } = useI18n();
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [uploadDuringTest, setUploadDuringTest] = useState(false);
+
+  useEffect(() => {
+    setTestResult(null);
+    setTesting(false);
+    setUploadDuringTest(false);
+  }, [editor?.index, editor?.value.key]);
+
   if (!editor) return null;
+  const target = editor.value;
   const setTarget = (value: Target) => onChange({ ...editor, value });
+  const test = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      setTestResult(await api<TestResult>('/api/targets/test', {
+        method: 'POST',
+        body: JSON.stringify({ target, upload_file: uploadDuringTest })
+      }));
+    } catch (err) {
+      setTestResult({ ok: false, message: err instanceof Error ? err.message : t('testFailed') });
+    } finally {
+      setTesting(false);
+    }
+  };
   return (
     <Modal
       open
@@ -24,7 +52,23 @@ export function TargetModal({ editor, saving, onChange, onCancel, onSave }: {
       onClose={onCancel}
       footer={<ModalFooter saving={saving} onCancel={onCancel} onSave={() => onSave(editor)} />}
     >
-      <TargetForm value={editor.value} onChange={setTarget} />
+      <TargetForm value={target} onChange={setTarget} />
+      <div className="test-strip">
+        <Button type="default" icon={<ServerCog size={16} />} loading={testing} onClick={test}>{t('testTarget')}</Button>
+        <Checkbox
+          className="test-download-choice"
+          value={uploadDuringTest ? ['upload'] : []}
+          onChange={(values) => setUploadDuringTest(values.map(String).includes('upload'))}
+          options={[{ label: t('uploadTestFile'), value: 'upload' }]}
+        />
+        <Tip content={t('uploadTestFileTip')} />
+        {testResult && (
+          <span className={`test-result ${testResult.ok ? 'success' : 'danger'}`}>
+            {testResult.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+            {targetTestMessage(testResult, t)}
+          </span>
+        )}
+      </div>
     </Modal>
   );
 }
@@ -94,4 +138,19 @@ function TargetForm({ value, onChange }: { value: Target; onChange: (value: Targ
       )}
     </div>
   );
+}
+
+function targetTestMessage(result: TestResult, t: (key: string) => string) {
+  if (result.code) {
+    const key = `targetTest.${result.code}`;
+    const template = t(key);
+    if (template !== key) {
+      return interpolate(template, result.details ?? {});
+    }
+  }
+  return result.message || t('testFailed');
+}
+
+function interpolate(template: string, values: Record<string, string>) {
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => values[key] ?? '');
 }

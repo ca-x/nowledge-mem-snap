@@ -140,9 +140,12 @@ const dictionary: Record<Lang, Record<string, string>> = {
     cancel: 'Cancel',
     save: 'Save',
     testSource: 'Test source',
+    testTarget: 'Test target',
     testFailed: 'Test failed',
     downloadRealExport: 'Download a real test export',
     downloadRealExportTip: 'When checked, testing calls the real export download endpoint and your browser downloads a ZIP.',
+    uploadTestFile: 'Upload a real test file',
+    uploadTestFileTip: 'When checked, testing writes a tiny file to the selected target and deletes it immediately.',
     daily: 'Daily',
     weekly: 'Weekly',
     once: 'Once',
@@ -235,7 +238,16 @@ const dictionary: Record<Lang, Record<string, string>> = {
     'sourceTest.directory_ok': 'Directory source is readable.',
     'sourceTest.directory_download_failed': 'Directory test download failed: {error}',
     'sourceTest.directory_download_ok': 'Directory source test archive is ready.',
-    'sourceTest.download_started': 'Test export download started ({bytes}).'
+    'sourceTest.download_started': 'Test export download started ({bytes}).',
+    'targetTest.target_required': 'Target is required.',
+    'targetTest.target_invalid': 'Target config is invalid: {error}',
+    'targetTest.target_open_failed': 'Target cannot be opened: {error}',
+    'targetTest.unsupported_target_type': 'Unsupported target type: {type}',
+    'targetTest.target_probe_failed': 'Target connection test failed: {error}',
+    'targetTest.target_probe_ok': 'Target connection test succeeded.',
+    'targetTest.target_write_failed': 'Target write test failed: {error}',
+    'targetTest.target_cleanup_failed': 'Test file was written, but cleanup failed: {error}',
+    'targetTest.target_upload_ok': 'Target is reachable. Test write and cleanup succeeded ({bytes}).'
   },
   zh: {
     language: '语言',
@@ -373,9 +385,12 @@ const dictionary: Record<Lang, Record<string, string>> = {
     cancel: '取消',
     save: '保存',
     testSource: '测试来源',
+    testTarget: '测试目标',
     testFailed: '测试失败',
     downloadRealExport: '下载一次真实导出',
     downloadRealExportTip: '勾选后，测试会调用真实导出下载接口，并让浏览器下载一个 ZIP 文件。',
+    uploadTestFile: '上传一个真实测试文件',
+    uploadTestFileTip: '勾选后，测试会向所选目标写入一个很小的文件，并立即删除。',
     daily: '每天',
     weekly: '每周',
     once: '单次',
@@ -468,7 +483,16 @@ const dictionary: Record<Lang, Record<string, string>> = {
     'sourceTest.directory_ok': '目录来源可读取。',
     'sourceTest.directory_download_failed': '目录测试下载失败：{error}',
     'sourceTest.directory_download_ok': '目录来源测试压缩包已准备好。',
-    'sourceTest.download_started': '测试导出已开始下载（{bytes}）。'
+    'sourceTest.download_started': '测试导出已开始下载（{bytes}）。',
+    'targetTest.target_required': '必须提供目标配置。',
+    'targetTest.target_invalid': '目标配置无效：{error}',
+    'targetTest.target_open_failed': '无法打开目标：{error}',
+    'targetTest.unsupported_target_type': '不支持的目标类型：{type}',
+    'targetTest.target_probe_failed': '目标连接测试失败：{error}',
+    'targetTest.target_probe_ok': '目标连接测试成功。',
+    'targetTest.target_write_failed': '目标写入测试失败：{error}',
+    'targetTest.target_cleanup_failed': '测试文件已写入，但清理失败：{error}',
+    'targetTest.target_upload_ok': '目标可访问，测试写入和清理已成功（{bytes}）。'
   }
 };
 

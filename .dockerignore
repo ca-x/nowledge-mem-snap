@@ -13,6 +13,7 @@ data
 dist
 tmp
 logs
+screenshot/
 *.db
 *.db-*
 *.log

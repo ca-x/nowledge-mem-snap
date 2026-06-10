@@ -224,6 +224,12 @@ func parseRetentionDate(raw string, loc *time.Location) (time.Time, error) {
 }
 
 func newS3FS(cfg config.S3Config) (afero.Fs, error) {
+	client := newS3Client(cfg)
+	fs := aferos3.NewFsFromClient(cfg.BucketName, client)
+	return prefixFS{Fs: fs, prefix: cfg.RootPrefix}, nil
+}
+
+func newS3Client(cfg config.S3Config) *awss3.Client {
 	awsCfg := aws.Config{
 		Region: cfg.Region,
 		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(
@@ -243,11 +249,18 @@ func newS3FS(cfg config.S3Config) (afero.Fs, error) {
 	client := awss3.NewFromConfig(awsCfg, func(options *awss3.Options) {
 		options.UsePathStyle = cfg.PathStyle
 	})
-	fs := aferos3.NewFsFromClient(cfg.BucketName, client)
-	return prefixFS{Fs: fs, prefix: cfg.RootPrefix}, nil
+	return client
 }
 
 func newWebDAVFS(ctx context.Context, cfg config.WebDAVConfig) (afero.Fs, error) {
+	client, err := newWebDAVClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return prefixFS{Fs: aferodav.New(webDAVFileSystem{client: client}, ctx), prefix: cfg.RootPrefix}, nil
+}
+
+func newWebDAVClient(cfg config.WebDAVConfig) (*webDAVHTTPClient, error) {
 	baseURL, err := url.Parse(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("parse WebDAV URL: %w", err)
@@ -263,7 +276,7 @@ func newWebDAVFS(ctx context.Context, cfg config.WebDAVConfig) (afero.Fs, error)
 			Timeout: 5 * time.Minute,
 		},
 	}
-	return prefixFS{Fs: aferodav.New(webDAVFileSystem{client: client}, ctx), prefix: cfg.RootPrefix}, nil
+	return client, nil
 }
 
 type prefixFS struct {

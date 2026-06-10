@@ -6,6 +6,16 @@ Nowledge Mem Snap 是一个自托管的 Nowledge Mem 备份服务。
 
 它可以把每个登录用户自己的备份配置同步到 S3 兼容存储和 WebDAV。推荐 source 是 Nowledge Mem 官方 Data Transfer API 导出的可移植 ZIP；目录 source 主要用于 Docker 场景下的运维级目录快照，并且只能访问显式允许的挂载根目录。
 
+## 界面截图
+
+PC：
+
+![Nowledge Mem Snap PC 界面](screenshot/README-zh-CN-pc.png)
+
+手机：
+
+![Nowledge Mem Snap 手机界面](screenshot/README-zh-CN-mobile.png)
+
 ## 功能
 
 - 多用户隔离：source、target、schedule、导出选项、备份清理策略、task、运行历史按用户/租户隔离。
@@ -16,7 +26,7 @@ Nowledge Mem Snap 是一个自托管的 Nowledge Mem 备份服务。
 - Source：
   - `nowledgemem_api`：通过 `github.com/lib-x/nowledgemem-go` 导出 Nowledge Mem 可移植 ZIP。
   - `directory`：压缩允许目录，适合挂载 Nowledge Mem Docker 的 `data` / `config` 目录做运维快照。
-- 远程 Nowledge Mem source 和目录 source 都可以在 UI 里点击按钮测试。
+- 远程 Nowledge Mem source、目录 source，以及 S3/WebDAV target 都可以在 UI 里点击按钮测试。
 - Target：
   - S3/R2 兼容存储，基于 `github.com/fclairamb/afero-s3`。
   - WebDAV，基于 `github.com/lib-x/aferodav` 和本项目的 HTTP WebDAV 适配。
@@ -41,13 +51,13 @@ docker compose up -d
 GitHub Actions 会自动构建并推送镜像到 Docker Hub 和 GitHub Container Registry：
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.4
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.4
+docker pull czyt/nowledge-mem-snap:v0.1.5
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.5
 ```
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.4`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.5`。
 - `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 
