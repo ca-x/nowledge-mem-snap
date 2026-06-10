@@ -46,18 +46,18 @@ PC：
 docker compose up -d
 ```
 
-打开 `http://localhost:14335`。如果没有设置管理员初始化环境变量，程序会进入设置向导创建第一个管理员。
+打开 `http://localhost:14335`。如果需要自动初始化第一个管理员、启用 OIDC，或开放目录 source，请先编辑 `example.env`。如果没有设置管理员初始化环境变量，程序会进入设置向导创建第一个管理员。
 
 GitHub Actions 会自动构建并推送镜像到 Docker Hub 和 GitHub Container Registry：
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.5
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.5
+docker pull czyt/nowledge-mem-snap:latest
+docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 ```
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.5`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.6`。
 - `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 
@@ -67,7 +67,15 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.5
 DATA_DIR=/app/data
 PORT=14335
 TZ=UTC
-NMEM_SNAP_DATABASE_URL=
+
+# 数据库选项：sqlite（默认）、postgres、mysql。
+NMEM_SNAP_DATABASE_TYPE=sqlite
+NMEM_SNAP_DATABASE_DSN=
+# NMEM_SNAP_DATABASE_DSN=file:/app/data/data.db?cache=shared&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(10000)
+# NMEM_SNAP_DATABASE_TYPE=postgres
+# NMEM_SNAP_DATABASE_DSN=postgres://nowledge_mem_snap:nowledge_mem_snap_password@postgres:5432/nowledge_mem_snap?sslmode=disable
+# NMEM_SNAP_DATABASE_TYPE=mysql
+# NMEM_SNAP_DATABASE_DSN=nowledge_mem_snap:nowledge_mem_snap_password@tcp(mysql:3306)/nowledge_mem_snap?parseTime=true&charset=utf8mb4&loc=Local
 
 # 可选：自动初始化第一个管理员。留空则使用页面设置向导。
 NMEM_SNAP_ADMIN_USERNAME=admin
@@ -144,7 +152,7 @@ go run .
 go run . backup <tenant> <task>
 ```
 
-默认数据库是 `DATA_DIR/data.db`。可以通过 `NMEM_SNAP_DATABASE_URL` 或 `DATABASE_URL` 覆盖 DSN。
+默认数据库是 `DATA_DIR/data.db`，SQLite DSN 默认启用 WAL、外键、normal synchronous 和 10 秒 busy timeout。可以通过 `NMEM_SNAP_DATABASE_TYPE` 加 `NMEM_SNAP_DATABASE_DSN` 切换到 PostgreSQL 或 MySQL；随附的 Compose 文件里提供了可选的 `postgres` 和 `mysql` profiles。
 
 Web UI 按使用流程提供 source、target、schedule、导出选项、备份清理策略、task、运行历史和设置页面。用户不需要编辑原始 JSON 配置，也不需要输入内部记录标识。
 

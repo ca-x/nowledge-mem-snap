@@ -46,18 +46,18 @@ Mobile:
 docker compose up -d
 ```
 
-Open `http://localhost:14335`. If no admin env vars are set, the setup wizard creates the first administrator.
+Open `http://localhost:14335`. Edit `example.env` before starting if you want to bootstrap the first admin, enable OIDC, or expose directory sources. If no admin env vars are set, the setup wizard creates the first administrator.
 
 Published images are built by GitHub Actions and pushed to Docker Hub and GitHub Container Registry:
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.5
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.5
+docker pull czyt/nowledge-mem-snap:latest
+docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 ```
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.5`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.6`.
 - `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 
@@ -67,7 +67,15 @@ Useful environment variables:
 DATA_DIR=/app/data
 PORT=14335
 TZ=UTC
-NMEM_SNAP_DATABASE_URL=
+
+# Database options: sqlite (default), postgres, mysql.
+NMEM_SNAP_DATABASE_TYPE=sqlite
+NMEM_SNAP_DATABASE_DSN=
+# NMEM_SNAP_DATABASE_DSN=file:/app/data/data.db?cache=shared&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(10000)
+# NMEM_SNAP_DATABASE_TYPE=postgres
+# NMEM_SNAP_DATABASE_DSN=postgres://nowledge_mem_snap:nowledge_mem_snap_password@postgres:5432/nowledge_mem_snap?sslmode=disable
+# NMEM_SNAP_DATABASE_TYPE=mysql
+# NMEM_SNAP_DATABASE_DSN=nowledge_mem_snap:nowledge_mem_snap_password@tcp(mysql:3306)/nowledge_mem_snap?parseTime=true&charset=utf8mb4&loc=Local
 
 # Optional bootstrap. If omitted, use the setup wizard.
 NMEM_SNAP_ADMIN_USERNAME=admin
@@ -144,7 +152,7 @@ CLI one-shot backup:
 go run . backup <tenant> <task>
 ```
 
-The default database is `DATA_DIR/data.db`. You can override the DSN with `NMEM_SNAP_DATABASE_URL` or `DATABASE_URL`.
+The default database is `DATA_DIR/data.db` with SQLite WAL, foreign keys, normal synchronous mode, and a 10s busy timeout. Use `NMEM_SNAP_DATABASE_TYPE` plus `NMEM_SNAP_DATABASE_DSN` to switch to PostgreSQL or MySQL. The bundled Compose file includes optional `postgres` and `mysql` profiles.
 
 The web UI follows the setup flow: sources, targets, schedules, export options, backup strategies, tasks, run history, and settings. Users do not edit raw JSON configuration or internal record identifiers.
 

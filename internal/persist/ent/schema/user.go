@@ -14,7 +14,7 @@ func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("tenant"),
 		field.String("username").Unique(),
-		field.String("password_hash"),
+		field.String("password_hash").Sensitive(),
 		field.String("display_name").Optional(),
 		field.String("avatar_url").Optional(),
 		field.Bool("is_admin").Default(false),

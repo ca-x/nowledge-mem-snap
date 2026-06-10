@@ -20,7 +20,7 @@ type SystemConfig struct {
 	// Key holds the value of the "key" field.
 	Key string `json:"key,omitempty"`
 	// Payload holds the value of the "payload" field.
-	Payload string `json:"payload,omitempty"`
+	Payload string `json:"-"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 	selectValues sql.SelectValues
@@ -115,8 +115,7 @@ func (_m *SystemConfig) String() string {
 	builder.WriteString("key=")
 	builder.WriteString(_m.Key)
 	builder.WriteString(", ")
-	builder.WriteString("payload=")
-	builder.WriteString(_m.Payload)
+	builder.WriteString("payload=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))

@@ -12,7 +12,7 @@ type TenantConfig struct {
 func (TenantConfig) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("tenant").Unique(),
-		field.String("payload"),
+		field.String("payload").Sensitive(),
 		field.Time("updated_at"),
 	}
 }

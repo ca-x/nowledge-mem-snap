@@ -12,7 +12,7 @@ type SystemConfig struct {
 func (SystemConfig) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("key").Unique(),
-		field.String("payload"),
+		field.String("payload").Sensitive(),
 		field.Time("updated_at"),
 	}
 }
