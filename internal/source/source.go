@@ -12,6 +12,7 @@ import (
 	"time"
 
 	mem "github.com/lib-x/nowledgemem-go"
+	"github.com/spf13/afero"
 
 	"github.com/lib-x/nowledge-mem-snap/internal/config"
 )
@@ -95,7 +96,8 @@ func (e *Exporter) exportNowledgeMem(ctx context.Context, sourceCfg config.Sourc
 
 func (e *Exporter) exportDirectory(root string) (Snapshot, error) {
 	root = filepath.Clean(root)
-	info, err := os.Stat(root)
+	fs := afero.NewReadOnlyFs(afero.NewBasePathFs(afero.NewOsFs(), root))
+	info, err := fs.Stat(".")
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("stat directory source: %w", err)
 	}
@@ -106,26 +108,18 @@ func (e *Exporter) exportDirectory(root string) (Snapshot, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	var files int
-	err = filepath.WalkDir(root, func(p string, entry os.DirEntry, walkErr error) error {
+	err = afero.Walk(fs, ".", func(name string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if p == root {
+		if name == "." {
 			return nil
 		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		name := filepath.ToSlash(rel)
+		name = strings.TrimPrefix(filepath.ToSlash(name), "./")
 		if strings.Contains(name, "\x00") {
 			return fmt.Errorf("path contains invalid character: %q", name)
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
+		if info.IsDir() {
 			header, err := zip.FileInfoHeader(info)
 			if err != nil {
 				return err
@@ -147,13 +141,17 @@ func (e *Exporter) exportDirectory(root string) (Snapshot, error) {
 		if err != nil {
 			return err
 		}
-		f, err := os.Open(p)
+		f, err := fs.Open(name)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
-		if _, err := io.Copy(w, f); err != nil {
-			return err
+		_, copyErr := io.Copy(w, f)
+		closeErr := f.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 		files++
 		return nil

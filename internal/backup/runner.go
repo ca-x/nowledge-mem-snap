@@ -145,7 +145,7 @@ func (r *Runner) run(ctx context.Context, task config.TaskConfig, trigger string
 				targetLogger.Info("backup upload finished", "object", artifact.Name, "bytes", result.Bytes)
 				if task.Retention.Mode != "" && task.Retention.Mode != "none" {
 					targetLogger.Info("backup retention started", "mode", task.Retention.Mode)
-					result.RetentionDeleted, err = storage.ApplyRetention(ctx, target, task, time.Now().UTC())
+					result.RetentionDeleted, err = storage.ApplyRetention(ctx, target, task, time.Now().In(time.Local))
 					if err != nil {
 						targetLogger.Warn("backup retention failed", "mode", task.Retention.Mode, "error", err)
 					} else {

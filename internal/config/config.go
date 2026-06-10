@@ -122,6 +122,7 @@ type ScheduleConfig struct {
 	Type    string `json:"type"`
 	Time    string `json:"time"`
 	Weekday string `json:"weekday,omitempty"`
+	RunAt   string `json:"run_at,omitempty"`
 }
 
 type TargetConfig struct {
@@ -692,6 +693,7 @@ func Normalize(cfg Config) Config {
 		cfg.Schedules[i].Type = strings.ToLower(strings.TrimSpace(cfg.Schedules[i].Type))
 		cfg.Schedules[i].Time = defaultString(strings.TrimSpace(cfg.Schedules[i].Time), "03:00")
 		cfg.Schedules[i].Weekday = strings.ToLower(strings.TrimSpace(cfg.Schedules[i].Weekday))
+		cfg.Schedules[i].RunAt = strings.TrimSpace(cfg.Schedules[i].RunAt)
 	}
 	for i := range cfg.Targets {
 		cfg.Targets[i].Key = strings.TrimSpace(cfg.Targets[i].Key)
@@ -867,11 +869,18 @@ func Validate(cfg Config) error {
 			return fmt.Errorf("duplicate schedule key %q", schedule.Key)
 		}
 		scheduleKeys[schedule.Key] = struct{}{}
-		if schedule.Type != "daily" && schedule.Type != "weekly" {
-			return fmt.Errorf("schedule %q type must be daily or weekly", schedule.Key)
+		if schedule.Type != "daily" && schedule.Type != "weekly" && schedule.Type != "once" {
+			return fmt.Errorf("schedule %q type must be daily, weekly, or once", schedule.Key)
 		}
-		if _, _, err := ParseClock(schedule.Time); err != nil {
-			return fmt.Errorf("schedule %q time: %w", schedule.Key, err)
+		switch schedule.Type {
+		case "once":
+			if _, err := ParseScheduleRunAt(schedule.RunAt, time.Local); err != nil {
+				return fmt.Errorf("schedule %q run_at: %w", schedule.Key, err)
+			}
+		default:
+			if _, _, err := ParseClock(schedule.Time); err != nil {
+				return fmt.Errorf("schedule %q time: %w", schedule.Key, err)
+			}
 		}
 		if schedule.Type == "weekly" {
 			if _, err := ParseWeekday(schedule.Weekday); err != nil {
@@ -1156,6 +1165,30 @@ func ParseClock(raw string) (hour int, minute int, err error) {
 		return 0, 0, fmt.Errorf("must be within 00:00 and 23:59")
 	}
 	return hour, minute, nil
+}
+
+func ParseScheduleRunAt(raw string, loc *time.Location) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, fmt.Errorf("must be set for once schedules")
+	}
+	if loc == nil {
+		loc = time.Local
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, nil
+	}
+	for _, layout := range []string{
+		"2006-01-02T15:04",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04",
+		"2006-01-02 15:04:05",
+	} {
+		if t, err := time.ParseInLocation(layout, raw, loc); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("must use YYYY-MM-DDTHH:MM in the configured timezone or RFC3339")
 }
 
 func ParseWeekday(raw string) (time.Weekday, error) {

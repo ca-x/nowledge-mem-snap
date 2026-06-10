@@ -20,7 +20,7 @@ It backs up each logged-in user's private configuration to S3-compatible storage
 - Targets:
   - S3/R2-compatible storage via `github.com/fclairamb/afero-s3`.
   - WebDAV via `github.com/lib-x/aferodav` and an HTTP WebDAV adapter.
-- Daily and weekly scheduled tasks.
+- Daily, weekly, and one-time scheduled tasks. Schedule times use the process `TZ`.
 - Optional AES-GCM encrypted backup packages per task.
 - Per-task remote backup cleanup: disabled, keep latest N, keep recent N days, keep after date, or keep before date.
 - Run history cleanup by count and age.
@@ -39,14 +39,12 @@ Open `http://localhost:14335`. If no admin env vars are set, the setup wizard cr
 Published images are built by GitHub Actions and pushed to Docker Hub and GitHub Container Registry:
 
 ```bash
-docker pull czyt/nowledge-mem-snap:latest
-docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
+docker pull czyt/nowledge-mem-snap:v0.1.0
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.0
 ```
 
 Image tags:
 
-- `latest`: pushed from the default branch.
-- `main`: pushed from the `main` branch.
 - `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.0`.
 - `sha-<commit>`: immutable commit image.
 
@@ -55,6 +53,7 @@ Useful environment variables:
 ```bash
 DATA_DIR=/app/data
 PORT=14335
+TZ=UTC
 NMEM_SNAP_DATABASE_URL=
 
 # Optional bootstrap. If omitted, use the setup wizard.
@@ -104,6 +103,15 @@ Target layout has two levels:
 - Task `object_prefix`: the task-specific path template under that root, for example `nowledge-mem/{task}/{timestamp}`.
 
 Automatic remote cleanup only scans the stable directory derived from the task `object_prefix` under the target `root_prefix`, and only removes backup objects ending in `.zip` or `.zip.aes.json`.
+
+Time semantics:
+
+- `TZ` is loaded at process start. The binary embeds IANA timezone data, so names such as `Asia/Shanghai` work even in minimal containers.
+- Daily and weekly schedules use `TZ`.
+- One-time schedules use `run_at` in `YYYY-MM-DDTHH:MM` form and are interpreted in `TZ` unless an RFC3339 offset is provided. After a one-time schedule runs, the task is automatically disabled.
+- `keep_days` uses local time in `TZ`.
+- Date-only `keep_after` keeps backups on or after local midnight for that date.
+- Date-only `keep_before` keeps only backups before local midnight for that date.
 
 ## Local Development
 

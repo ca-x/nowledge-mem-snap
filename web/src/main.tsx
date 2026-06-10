@@ -18,11 +18,20 @@ import {
   UserRound,
   XCircle
 } from 'lucide-react';
+import {
+  I18nContext,
+  initialLang,
+  localeForLang,
+  makeTranslator,
+  persistLang,
+  useI18n
+} from './i18n';
+import type { Lang, Translate } from './i18n';
 import './styles.css';
 
 type SourceType = 'nowledgemem_api' | 'directory';
 type TargetType = 's3' | 'webdav';
-type ScheduleType = 'daily' | 'weekly';
+type ScheduleType = 'daily' | 'weekly' | 'once';
 type ExportFlag =
   | 'include_memories'
   | 'include_threads'
@@ -82,6 +91,7 @@ type Schedule = {
   type: ScheduleType;
   time: string;
   weekday?: string;
+  run_at?: string;
 };
 
 type Task = {
@@ -167,7 +177,13 @@ const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
 
 function Root() {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
+  const [lang, setLangState] = useState<Lang>(initialLang);
   const path = window.location.pathname;
+  const t = useMemo(() => makeTranslator(lang), [lang]);
+  const setLang = (next: Lang) => {
+    setLangState(next);
+    persistLang(next);
+  };
 
   useEffect(() => {
     api<{ setup_required: boolean }>('/api/setup/status')
@@ -175,10 +191,11 @@ function Root() {
       .catch(() => setSetupRequired(false));
   }, []);
 
-  if (setupRequired === null) return <Splash />;
-  if (setupRequired) return <SetupPage />;
-  if (path === '/login') return <LoginPage />;
-  return <Dashboard />;
+  return (
+    <I18nContext.Provider value={{ lang, setLang, t }}>
+      {setupRequired === null ? <Splash /> : setupRequired ? <SetupPage /> : path === '/login' ? <LoginPage /> : <Dashboard />}
+    </I18nContext.Provider>
+  );
 }
 
 function Splash() {
@@ -190,6 +207,7 @@ function Splash() {
 }
 
 function SetupPage() {
+  const { t } = useI18n();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -199,24 +217,25 @@ function SetupPage() {
       await api('/api/setup', { method: 'POST', body: JSON.stringify({ username, password }) });
       window.location.href = '/';
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Setup failed');
+      setError(err instanceof Error ? err.message : t('setupFailed'));
     }
   };
   return (
-    <AuthShell title="Set up your island" subtitle="Create the first administrator.">
-      <Field label="Admin username">
+    <AuthShell title={t('setupTitle')} subtitle={t('setupSubtitle')}>
+      <Field label={t('adminUsername')}>
         <Input size="large" value={username} onChange={(e) => setUsername(e.target.value)} shadow />
       </Field>
-      <Field label="Password">
+      <Field label={t('password')}>
         <Input size="large" type="password" value={password} onChange={(e) => setPassword(e.target.value)} shadow />
       </Field>
       {error && <p className="error">{error}</p>}
-      <Button type="primary" size="large" block onClick={submit}>Create admin</Button>
+      <Button type="primary" size="large" block onClick={submit}>{t('createAdmin')}</Button>
     </AuthShell>
   );
 }
 
 function LoginPage() {
+  const { t } = useI18n();
   const [options, setOptions] = useState<{ password: boolean; oidc: boolean; username: string }>({ password: true, oidc: false, username: 'admin' });
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
@@ -236,27 +255,27 @@ function LoginPage() {
       await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
       window.location.href = next;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : t('loginFailed'));
     }
   };
 
   return (
-    <AuthShell title="Welcome back" subtitle="Your backup island is waiting.">
+    <AuthShell title={t('loginTitle')} subtitle={t('loginSubtitle')}>
       {options.password && (
         <>
-          <Field label="Username">
+          <Field label={t('username')}>
             <Input size="large" value={username} onChange={(e) => setUsername(e.target.value)} shadow />
           </Field>
-          <Field label="Password">
+          <Field label={t('password')}>
             <Input size="large" type="password" value={password} onChange={(e) => setPassword(e.target.value)} shadow />
           </Field>
           {error && <p className="error">{error}</p>}
-          <Button type="primary" size="large" block onClick={login}>Log in</Button>
+          <Button type="primary" size="large" block onClick={login}>{t('logIn')}</Button>
         </>
       )}
       {options.oidc && (
         <Button type="default" size="large" block onClick={() => { window.location.href = `/auth/oidc/start?next=${encodeURIComponent(next)}`; }}>
-          Sign in with OIDC
+          {t('signInOidc')}
         </Button>
       )}
     </AuthShell>
@@ -267,6 +286,7 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
   return (
     <div className="page auth">
       <Card color="app-blue" className="auth-card" pattern="app-yellow">
+        <div className="auth-toolbar"><LanguageSwitch /></div>
         <img src="/logo.png" className="logo" alt="Nowledge Mem Snap" />
         <h1>{title}</h1>
         <p>{subtitle}</p>
@@ -276,7 +296,18 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
   );
 }
 
+function LanguageSwitch() {
+  const { lang, setLang, t } = useI18n();
+  return (
+    <div className="lang-switch" aria-label={t('language')}>
+      <Button type={lang === 'zh' ? 'primary' : 'default'} size="small" onClick={() => setLang('zh')}>中</Button>
+      <Button type={lang === 'en' ? 'primary' : 'default'} size="small" onClick={() => setLang('en')}>EN</Button>
+    </div>
+  );
+}
+
 function Dashboard() {
+  const { lang, t } = useI18n();
   const [cfg, setCfg] = useState<Config | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -317,7 +348,7 @@ function Dashboard() {
       setCfg(normalizeConfig(saved));
       setMessage(successMessage);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
+      setError(err instanceof Error ? err.message : t('saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -328,7 +359,7 @@ function Dashboard() {
     const sources = [...cfg.sources];
     if (editor.index < 0) sources.push(editor.value);
     else sources[editor.index] = editor.value;
-    await persist({ ...cfg, sources }, 'Source saved');
+    await persist({ ...cfg, sources }, t('sourceSaved'));
     setSourceEditor(null);
   };
 
@@ -337,7 +368,7 @@ function Dashboard() {
     const targets = [...cfg.targets];
     if (editor.index < 0) targets.push(editor.value);
     else targets[editor.index] = editor.value;
-    await persist({ ...cfg, targets }, 'Target saved');
+    await persist({ ...cfg, targets }, t('targetSaved'));
     setTargetEditor(null);
   };
 
@@ -346,7 +377,7 @@ function Dashboard() {
     const schedules = [...cfg.schedules];
     if (editor.index < 0) schedules.push(editor.value);
     else schedules[editor.index] = editor.value;
-    await persist({ ...cfg, schedules }, 'Schedule saved');
+    await persist({ ...cfg, schedules }, t('scheduleSaved'));
     setScheduleEditor(null);
   };
 
@@ -355,12 +386,12 @@ function Dashboard() {
     const tasks = [...cfg.tasks];
     if (editor.index < 0) tasks.push(editor.value);
     else tasks[editor.index] = editor.value;
-    await persist({ ...cfg, tasks }, 'Task saved');
+    await persist({ ...cfg, tasks }, t('taskSaved'));
     setTaskEditor(null);
   };
 
   const saveSettings = async (next: Config) => {
-    await persist(next, 'Settings saved');
+    await persist(next, t('settingsSaved'));
   };
 
   const saveProfile = async (next: Profile) => {
@@ -370,9 +401,9 @@ function Dashboard() {
     try {
       const saved = await api<Profile>('/api/profile', { method: 'PUT', body: JSON.stringify(next) });
       setProfile(saved);
-      setMessage('Profile saved');
+      setMessage(t('profileSaved'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Profile save failed');
+      setError(err instanceof Error ? err.message : t('profileSaveFailed'));
     } finally {
       setSaving(false);
     }
@@ -386,13 +417,13 @@ function Dashboard() {
 
   const runTask = async (taskKey: string) => {
     setError('');
-    setMessage('Running backup...');
+    setMessage(t('runningBackup'));
     try {
       await api('/api/backup/run', { method: 'POST', body: JSON.stringify({ task_key: taskKey }) });
       await load();
-      setMessage('Backup finished');
+      setMessage(t('backupFinished'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Backup failed');
+      setError(err instanceof Error ? err.message : t('backupFailed'));
     }
   };
 
@@ -416,23 +447,24 @@ function Dashboard() {
           <img src="/logo.png" className="logo small" alt="" />
           <div>
             <h1>Nowledge Mem Snap</h1>
-            <p>Private backup islands for every user</p>
+            <p>{t('dashboardSubtitle')}</p>
           </div>
         </div>
         <div className="account-box">
+          <LanguageSwitch />
           <Avatar profile={profile} />
           <div>
             <strong>{profile.display_name || profile.username}</strong>
             <span>{profile.username}</span>
           </div>
-          <Button type="default" icon={<LogOut size={16} />} onClick={logout}>Logout</Button>
+          <Button type="default" icon={<LogOut size={16} />} onClick={logout}>{t('logout')}</Button>
         </div>
       </header>
 
       <section className="stats">
-        <Stat icon={<DatabaseBackup />} label="Sources" value={summary.sources} />
-        <Stat icon={<ShipWheel />} label="Targets" value={summary.targets} />
-        <Stat icon={<FolderArchive />} label="Tasks" value={summary.tasks} />
+        <Stat icon={<DatabaseBackup />} label={t('sources')} value={summary.sources} />
+        <Stat icon={<ShipWheel />} label={t('targets')} value={summary.targets} />
+        <Stat icon={<FolderArchive />} label={t('tasks')} value={summary.tasks} />
       </section>
 
       {(message || error) && (
@@ -447,61 +479,61 @@ function Dashboard() {
         items={[
           {
             key: 'tasks',
-            label: 'Tasks',
+            label: t('tasks'),
             children: (
               <Tasks
                 tasks={cfg.tasks}
                 sources={cfg.sources}
                 targets={cfg.targets}
                 schedules={cfg.schedules}
-                onAdd={() => setTaskEditor({ index: -1, value: defaultTask(cfg) })}
+                onAdd={() => setTaskEditor({ index: -1, value: defaultTask(cfg, t) })}
                 onEdit={(task, index) => setTaskEditor({ index, value: cloneTask(task) })}
-                onDelete={(index) => removeItem('tasks', index, 'Task deleted')}
+                onDelete={(index) => removeItem('tasks', index, t('taskDeleted'))}
                 onRun={runTask}
               />
             )
           },
           {
             key: 'sources',
-            label: 'Sources',
+            label: t('sources'),
             children: (
               <Sources
                 sources={cfg.sources}
                 roots={roots}
-                onAdd={() => setSourceEditor({ index: -1, value: defaultSource(cfg.sources.length, roots) })}
+                onAdd={() => setSourceEditor({ index: -1, value: defaultSource(cfg.sources.length, roots, t) })}
                 onEdit={(source, index) => setSourceEditor({ index, value: cloneSource(source) })}
-                onDelete={(index) => removeItem('sources', index, 'Source deleted')}
+                onDelete={(index) => removeItem('sources', index, t('sourceDeleted'))}
               />
             )
           },
           {
             key: 'targets',
-            label: 'Targets',
+            label: t('targets'),
             children: (
               <Targets
                 targets={cfg.targets}
-                onAdd={() => setTargetEditor({ index: -1, value: defaultTarget(cfg.targets.length) })}
+                onAdd={() => setTargetEditor({ index: -1, value: defaultTarget(cfg.targets.length, t) })}
                 onEdit={(target, index) => setTargetEditor({ index, value: cloneTarget(target) })}
-                onDelete={(index) => removeItem('targets', index, 'Target deleted')}
+                onDelete={(index) => removeItem('targets', index, t('targetDeleted'))}
               />
             )
           },
           {
             key: 'schedules',
-            label: 'Schedules',
+            label: t('schedules'),
             children: (
               <Schedules
                 schedules={cfg.schedules}
-                onAdd={() => setScheduleEditor({ index: -1, value: defaultSchedule(cfg.schedules.length) })}
+                onAdd={() => setScheduleEditor({ index: -1, value: defaultSchedule(cfg.schedules.length, t) })}
                 onEdit={(schedule, index) => setScheduleEditor({ index, value: { ...schedule } })}
-                onDelete={(index) => removeItem('schedules', index, 'Schedule deleted')}
+                onDelete={(index) => removeItem('schedules', index, t('scheduleDeleted'))}
               />
             )
           },
-          { key: 'runs', label: 'Runs', children: <Runs runs={runs} /> },
+          { key: 'runs', label: t('runs'), children: <Runs runs={runs} locale={localeForLang(lang)} /> },
           {
             key: 'settings',
-            label: 'Settings',
+            label: t('settings'),
             children: <SettingsPanel profile={profile} cfg={cfg} saving={saving} onSaveProfile={saveProfile} onSaveConfig={saveSettings} />
           }
         ]}
@@ -560,9 +592,10 @@ function Sources({ sources, roots, onAdd, onEdit, onDelete }: {
   onEdit: (source: Source, index: number) => void;
   onDelete: (index: number) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <Panel title="Sources" actionLabel="Add source" onAdd={onAdd}>
-      {sources.length === 0 ? <Empty text="No sources yet." /> : (
+    <Panel title={t('sources')} actionLabel={t('addSource')} onAdd={onAdd}>
+      {sources.length === 0 ? <Empty text={t('noSourcesYet')} /> : (
         <div className="grid-list">
           {sources.map((source, index) => (
             <Card key={source.key} color="app-blue" className="item">
@@ -570,9 +603,9 @@ function Sources({ sources, roots, onAdd, onEdit, onDelete }: {
                 <h3>{source.name}</h3>
                 <Switch checked={source.enabled} disabled />
               </div>
-              <p>{source.type === 'directory' ? 'Directory source' : 'Nowledge Mem API'}</p>
+              <p>{source.type === 'directory' ? t('directorySource') : t('nowledgeMemApi')}</p>
               <code>{source.type === 'directory' ? source.directory?.path : source.nowledge_mem?.api_url}</code>
-              {source.type === 'directory' && roots.length === 0 && <p className="muted">Directory roots are not enabled.</p>}
+              {source.type === 'directory' && roots.length === 0 && <p className="muted">{t('directoryRootsDisabled')}</p>}
               {source.remark && <p>{source.remark}</p>}
               <CardActions onEdit={() => onEdit(source, index)} onDelete={() => onDelete(index)} />
             </Card>
@@ -589,9 +622,10 @@ function Targets({ targets, onAdd, onEdit, onDelete }: {
   onEdit: (target: Target, index: number) => void;
   onDelete: (index: number) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <Panel title="Targets" actionLabel="Add target" onAdd={onAdd}>
-      {targets.length === 0 ? <Empty text="No targets yet." /> : (
+    <Panel title={t('targets')} actionLabel={t('addTarget')} onAdd={onAdd}>
+      {targets.length === 0 ? <Empty text={t('noTargetsYet')} /> : (
         <div className="grid-list">
           {targets.map((target, index) => (
             <Card key={target.key} color="app-green" className="item">
@@ -616,9 +650,10 @@ function Schedules({ schedules, onAdd, onEdit, onDelete }: {
   onEdit: (schedule: Schedule, index: number) => void;
   onDelete: (index: number) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <Panel title="Schedules" actionLabel="Add schedule" onAdd={onAdd}>
-      {schedules.length === 0 ? <Empty text="No schedules yet." /> : (
+    <Panel title={t('schedules')} actionLabel={t('addSchedule')} onAdd={onAdd}>
+      {schedules.length === 0 ? <Empty text={t('noSchedulesYet')} /> : (
         <div className="grid-list">
           {schedules.map((schedule, index) => (
             <Card key={schedule.key} color="app-yellow" className="item">
@@ -626,7 +661,7 @@ function Schedules({ schedules, onAdd, onEdit, onDelete }: {
                 <h3>{schedule.name}</h3>
                 <Switch checked={schedule.enabled} disabled />
               </div>
-              <p>{schedule.type === 'weekly' ? `Weekly ${schedule.weekday}` : 'Daily'} at {schedule.time}</p>
+              <p>{scheduleLabel(schedule, t)}</p>
               <code>{schedule.key}</code>
               <CardActions onEdit={() => onEdit(schedule, index)} onDelete={() => onDelete(index)} />
             </Card>
@@ -647,9 +682,10 @@ function Tasks({ tasks, sources, targets, schedules, onAdd, onEdit, onDelete, on
   onDelete: (index: number) => void;
   onRun: (key: string) => void;
 }) {
+  const { t } = useI18n();
   return (
-    <Panel title="Tasks" actionLabel="Add task" onAdd={onAdd}>
-      {tasks.length === 0 ? <Empty text="No tasks yet." /> : (
+    <Panel title={t('tasks')} actionLabel={t('addTask')} onAdd={onAdd}>
+      {tasks.length === 0 ? <Empty text={t('noTasksYet')} /> : (
         <div className="grid-list">
           {tasks.map((task, index) => (
             <Card key={task.key} color="app-yellow" className="item">
@@ -657,15 +693,15 @@ function Tasks({ tasks, sources, targets, schedules, onAdd, onEdit, onDelete, on
                 <h3>{task.name}</h3>
                 <Switch checked={task.enabled} disabled />
               </div>
-              <p>Source: {sources.find((s) => s.key === task.source_key)?.name ?? task.source_key}</p>
-              <p>Schedule: {schedules.find((s) => s.key === task.schedule_key)?.name ?? task.schedule_key}</p>
-              <p>Targets: {task.target_keys.map((k) => targets.find((t) => t.key === k)?.name ?? k).join(', ') || 'None'}</p>
-              <p>{task.encryption.enabled ? 'Encrypted package' : 'Plain portable zip'}</p>
-              <p>Retention: {retentionLabel(task.retention)}</p>
+              <p>{t('source')}: {sources.find((s) => s.key === task.source_key)?.name ?? task.source_key}</p>
+              <p>{t('schedule')}: {schedules.find((s) => s.key === task.schedule_key)?.name ?? task.schedule_key}</p>
+              <p>{t('targets')}: {task.target_keys.map((k) => targets.find((target) => target.key === k)?.name ?? k).join(', ') || t('none')}</p>
+              <p>{task.encryption.enabled ? t('encryptedPackage') : t('plainPortableZip')}</p>
+              <p>{t('retention')}: {retentionLabel(task.retention, t)}</p>
               <div className="card-actions">
-                <Button type="primary" icon={<Play size={16} />} onClick={() => onRun(task.key)}>Run now</Button>
-                <Button type="default" icon={<Pencil size={16} />} onClick={() => onEdit(task, index)}>Edit</Button>
-                <Button type="default" danger icon={<Trash2 size={16} />} onClick={() => onDelete(index)}>Delete</Button>
+                <Button type="primary" icon={<Play size={16} />} onClick={() => onRun(task.key)}>{t('runNow')}</Button>
+                <Button type="default" icon={<Pencil size={16} />} onClick={() => onEdit(task, index)}>{t('edit')}</Button>
+                <Button type="default" danger icon={<Trash2 size={16} />} onClick={() => onDelete(index)}>{t('delete')}</Button>
               </div>
             </Card>
           ))}
@@ -675,15 +711,16 @@ function Tasks({ tasks, sources, targets, schedules, onAdd, onEdit, onDelete, on
   );
 }
 
-function Runs({ runs }: { runs: Run[] }) {
+function Runs({ runs, locale }: { runs: Run[]; locale: string }) {
+  const { t } = useI18n();
   return (
-    <Panel title="Runs">
-      <div className="runs">{runs.length === 0 ? <Empty text="No backups yet." /> : runs.map((run) => (
+    <Panel title={t('runs')}>
+      <div className="runs">{runs.length === 0 ? <Empty text={t('noBackupsYet')} /> : runs.map((run) => (
         <Card key={run.id} color="purple" className="run">
-          <div className="item-head"><h3>{run.task_name}</h3><span className={`badge ${run.status}`}>{run.status}</span></div>
-          <p>{new Date(run.started_at).toLocaleString()} · {formatBytes(run.size_bytes)} · {run.encrypted ? 'encrypted' : 'zip'}</p>
+          <div className="item-head"><h3>{run.task_name}</h3><span className={`badge ${run.status}`}>{statusLabel(run.status, t)}</span></div>
+          <p>{new Date(run.started_at).toLocaleString(locale)} · {formatBytes(run.size_bytes)} · {run.encrypted ? t('encrypted') : t('zip')}</p>
           <code>{run.object_name}</code>
-          <div className="target-results">{run.targets.map((target) => <span key={target.target_name}><ShieldCheck size={14} /> {target.target_name}: {target.status}{target.retention_deleted ? ` · deleted ${target.retention_deleted}` : ''}</span>)}</div>
+          <div className="target-results">{run.targets.map((target) => <span key={target.target_name}><ShieldCheck size={14} /> {target.target_name}: {statusLabel(target.status, t)}{target.retention_deleted ? ` · ${t('deleted')} ${target.retention_deleted}` : ''}</span>)}</div>
         </Card>
       ))}</div>
     </Panel>
@@ -697,6 +734,7 @@ function SettingsPanel({ profile, cfg, saving, onSaveProfile, onSaveConfig }: {
   onSaveProfile: (profile: Profile) => void;
   onSaveConfig: (cfg: Config) => void;
 }) {
+  const { t } = useI18n();
   const [draftProfile, setDraftProfile] = useState(profile);
   const [historyLimit, setHistoryLimit] = useState(String(cfg.history_limit));
   const [historyDays, setHistoryDays] = useState(String(cfg.history_retention_days));
@@ -720,35 +758,35 @@ function SettingsPanel({ profile, cfg, saving, onSaveProfile, onSaveConfig }: {
   };
 
   return (
-    <Panel title="Settings">
+    <Panel title={t('settings')}>
       <div className="settings-grid">
         <Card color="app-blue" className="settings-card">
-          <div className="settings-title"><UserRound size={20} /> Profile</div>
+          <div className="settings-title"><UserRound size={20} /> {t('profile')}</div>
           <div className="avatar-edit">
             <Avatar profile={draftProfile} />
             <div>
               <input id="avatar-upload" className="file-input" type="file" accept="image/*" onChange={(event) => uploadAvatar(event.target.files?.[0])} />
-              <Button type="default" onClick={() => document.getElementById('avatar-upload')?.click()}>Upload image</Button>
+              <Button type="default" onClick={() => document.getElementById('avatar-upload')?.click()}>{t('uploadImage')}</Button>
             </div>
           </div>
           <div className="editor-form">
-            <Field label="Nickname">
+            <Field label={t('nickname')}>
               <Input value={draftProfile.display_name} onChange={(e) => setDraftProfile({ ...draftProfile, display_name: e.target.value })} allowClear />
             </Field>
-            <Field label="Avatar URL or base64">
+            <Field label={t('avatarUrlOrBase64')}>
               <Input value={draftProfile.avatar_url} onChange={(e) => setDraftProfile({ ...draftProfile, avatar_url: e.target.value })} allowClear />
             </Field>
-            <Button type="primary" loading={saving} onClick={() => onSaveProfile(draftProfile)}>Save profile</Button>
+            <Button type="primary" loading={saving} onClick={() => onSaveProfile(draftProfile)}>{t('saveProfile')}</Button>
           </div>
         </Card>
 
         <Card color="app-green" className="settings-card">
-          <div className="settings-title"><Settings size={20} /> History</div>
+          <div className="settings-title"><Settings size={20} /> {t('history')}</div>
           <div className="editor-form">
-            <Field label="Keep latest runs">
+            <Field label={t('keepLatestRuns')}>
               <Input type="number" min={1} value={historyLimit} onChange={(e) => setHistoryLimit(e.target.value)} />
             </Field>
-            <Field label="Keep run history days">
+            <Field label={t('keepRunHistoryDays')}>
               <Input type="number" min={1} value={historyDays} onChange={(e) => setHistoryDays(e.target.value)} />
             </Field>
             <Button
@@ -760,13 +798,13 @@ function SettingsPanel({ profile, cfg, saving, onSaveProfile, onSaveConfig }: {
                 history_retention_days: Math.max(1, Number(historyDays) || 180)
               })}
             >
-              Save history settings
+              {t('saveHistorySettings')}
             </Button>
           </div>
         </Card>
 
         <Card color="app-yellow" className="settings-card wide">
-          <div className="settings-title"><FolderArchive size={20} /> Nowledge Mem export</div>
+          <div className="settings-title"><FolderArchive size={20} /> {t('nowledgeMemExport')}</div>
           <div className="editor-form">
             <ExportFields
               value={exportDraft}
@@ -779,7 +817,7 @@ function SettingsPanel({ profile, cfg, saving, onSaveProfile, onSaveConfig }: {
               loading={saving}
               onClick={() => onSaveConfig({ ...cfg, export: exportDraft })}
             >
-              Save export defaults
+              {t('saveExportDefaults')}
             </Button>
           </div>
         </Card>
@@ -801,10 +839,11 @@ function Panel({ title, actionLabel, onAdd, children }: { title: string; actionL
 }
 
 function CardActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="card-actions">
-      <Button type="default" icon={<Pencil size={16} />} onClick={onEdit}>Edit</Button>
-      <Button type="default" danger icon={<Trash2 size={16} />} onClick={onDelete}>Delete</Button>
+      <Button type="default" icon={<Pencil size={16} />} onClick={onEdit}>{t('edit')}</Button>
+      <Button type="default" danger icon={<Trash2 size={16} />} onClick={onDelete}>{t('delete')}</Button>
     </div>
   );
 }
@@ -817,6 +856,7 @@ function SourceModal({ editor, roots, saving, onChange, onCancel, onSave }: {
   onCancel: () => void;
   onSave: (editor: Editor<Source>) => void;
 }) {
+  const { t } = useI18n();
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
 
@@ -835,7 +875,7 @@ function SourceModal({ editor, roots, saving, onChange, onCancel, onSave }: {
       const result = await api<TestResult>('/api/sources/test', { method: 'POST', body: JSON.stringify(source) });
       setTestResult(result);
     } catch (err) {
-      setTestResult({ ok: false, message: err instanceof Error ? err.message : 'Test failed' });
+      setTestResult({ ok: false, message: err instanceof Error ? err.message : t('testFailed') });
     } finally {
       setTesting(false);
     }
@@ -843,7 +883,7 @@ function SourceModal({ editor, roots, saving, onChange, onCancel, onSave }: {
   return (
     <Modal
       open
-      title={editor.index < 0 ? 'Add source' : 'Edit source'}
+      title={editor.index < 0 ? t('addSourceTitle') : t('editSourceTitle')}
       typewriter={false}
       width={720}
       onClose={onCancel}
@@ -851,7 +891,7 @@ function SourceModal({ editor, roots, saving, onChange, onCancel, onSave }: {
     >
       <SourceForm value={source} roots={roots} onChange={setSource} />
       <div className="test-strip">
-        <Button type="default" icon={<ServerCog size={16} />} loading={testing} onClick={test}>Test source</Button>
+        <Button type="default" icon={<ServerCog size={16} />} loading={testing} onClick={test}>{t('testSource')}</Button>
         {testResult && (
           <span className={`test-result ${testResult.ok ? 'success' : 'danger'}`}>
             {testResult.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
@@ -864,6 +904,7 @@ function SourceModal({ editor, roots, saving, onChange, onCancel, onSave }: {
 }
 
 function SourceForm({ value, roots, onChange }: { value: Source; roots: SourceRoot[]; onChange: (value: Source) => void }) {
+  const { t } = useI18n();
   const nowledge = defaultNowledge(value);
   const directory = defaultDirectory(value, roots);
   const set = (patch: Partial<Source>) => onChange({ ...value, ...patch });
@@ -873,36 +914,36 @@ function SourceForm({ value, roots, onChange }: { value: Source; roots: SourceRo
   return (
     <div className="editor-form">
       <FormGrid>
-        <Field label="Key">
+        <Field label={t('key')}>
           <Input value={value.key} onChange={(e) => set({ key: keyify(e.target.value) })} allowClear />
         </Field>
-        <Field label="Name">
+        <Field label={t('name')}>
           <Input value={value.name} onChange={(e) => set({ name: e.target.value })} allowClear />
         </Field>
       </FormGrid>
-      <SwitchField label="Enabled" checked={value.enabled} onChange={(enabled) => set({ enabled })} />
-      <Field label="Type">
+      <SwitchField label={t('enabled')} checked={value.enabled} onChange={(enabled) => set({ enabled })} />
+      <Field label={t('type')}>
         <Radio
           value={value.type}
           onChange={(next) => set({ type: String(next) as SourceType })}
           options={[
-            { label: 'Nowledge Mem API', value: 'nowledgemem_api' },
-            { label: 'Directory', value: 'directory' }
+            { label: t('nowledgeMemApi'), value: 'nowledgemem_api' },
+            { label: t('directorySource'), value: 'directory' }
           ]}
         />
       </Field>
       {value.type === 'nowledgemem_api' ? (
         <FormGrid>
-          <Field label="API URL">
+          <Field label={t('apiUrl')}>
             <Input value={nowledge.api_url} onChange={(e) => setNowledge({ api_url: e.target.value })} allowClear />
           </Field>
-          <Field label="API key env">
+          <Field label={t('apiKeyEnv')}>
             <Input value={nowledge.api_key_env} onChange={(e) => setNowledge({ api_key_env: e.target.value })} allowClear />
           </Field>
         </FormGrid>
       ) : (
         <FormGrid>
-          <Field label="Allowed root">
+          <Field label={t('allowedRoot')}>
             <Select
               value={directory.root_key || roots[0]?.key || ''}
               onChange={(rootKey) => {
@@ -910,16 +951,16 @@ function SourceForm({ value, roots, onChange }: { value: Source; roots: SourceRo
                 setDirectory({ root_key: rootKey, path: root?.path ?? directory.path });
               }}
               options={roots.map((root) => ({ key: root.key, label: `${root.name} · ${root.path}` }))}
-              placeholder="No allowed roots"
+              placeholder={t('noAllowedRoots')}
               disabled={roots.length === 0}
             />
           </Field>
-          <Field label="Directory path">
+          <Field label={t('directoryPath')}>
             <Input value={directory.path} onChange={(e) => setDirectory({ path: e.target.value })} allowClear />
           </Field>
         </FormGrid>
       )}
-      <Field label="Remark">
+      <Field label={t('remark')}>
         <Input value={value.remark ?? ''} onChange={(e) => set({ remark: e.target.value })} allowClear />
       </Field>
     </div>
@@ -933,12 +974,13 @@ function TargetModal({ editor, saving, onChange, onCancel, onSave }: {
   onCancel: () => void;
   onSave: (editor: Editor<Target>) => void;
 }) {
+  const { t } = useI18n();
   if (!editor) return null;
   const setTarget = (value: Target) => onChange({ ...editor, value });
   return (
     <Modal
       open
-      title={editor.index < 0 ? 'Add target' : 'Edit target'}
+      title={editor.index < 0 ? t('addTargetTitle') : t('editTargetTitle')}
       typewriter={false}
       width={760}
       onClose={onCancel}
@@ -950,6 +992,7 @@ function TargetModal({ editor, saving, onChange, onCancel, onSave }: {
 }
 
 function TargetForm({ value, onChange }: { value: Target; onChange: (value: Target) => void }) {
+  const { t } = useI18n();
   const s3 = defaultS3(value);
   const webdav = defaultWebDAV(value);
   const set = (patch: Partial<Target>) => onChange({ ...value, ...patch });
@@ -958,15 +1001,15 @@ function TargetForm({ value, onChange }: { value: Target; onChange: (value: Targ
   return (
     <div className="editor-form">
       <FormGrid>
-        <Field label="Key">
+        <Field label={t('key')}>
           <Input value={value.key} onChange={(e) => set({ key: keyify(e.target.value) })} allowClear />
         </Field>
-        <Field label="Name">
+        <Field label={t('name')}>
           <Input value={value.name} onChange={(e) => set({ name: e.target.value })} allowClear />
         </Field>
       </FormGrid>
-      <SwitchField label="Enabled" checked={value.enabled} onChange={(enabled) => set({ enabled })} />
-      <Field label="Type">
+      <SwitchField label={t('enabled')} checked={value.enabled} onChange={(enabled) => set({ enabled })} />
+      <Field label={t('type')}>
         <Radio
           value={value.type}
           onChange={(next) => set({ type: String(next) as TargetType })}
@@ -979,39 +1022,39 @@ function TargetForm({ value, onChange }: { value: Target; onChange: (value: Targ
       {value.type === 's3' ? (
         <>
           <FormGrid>
-            <Field label="Endpoint URL">
+            <Field label={t('endpointUrl')}>
               <Input value={s3.endpoint_url} onChange={(e) => setS3({ endpoint_url: e.target.value })} allowClear />
             </Field>
-            <Field label="Region">
+            <Field label={t('region')}>
               <Input value={s3.region} onChange={(e) => setS3({ region: e.target.value })} allowClear />
             </Field>
-            <Field label="Bucket">
+            <Field label={t('bucket')}>
               <Input value={s3.bucket_name} onChange={(e) => setS3({ bucket_name: e.target.value })} allowClear />
             </Field>
-            <Field label="Root prefix">
+            <Field label={t('rootPrefix')}>
               <Input value={s3.root_prefix} onChange={(e) => setS3({ root_prefix: e.target.value })} allowClear />
             </Field>
-            <Field label="Access key id">
+            <Field label={t('accessKeyId')}>
               <Input value={s3.access_key_id} onChange={(e) => setS3({ access_key_id: e.target.value })} allowClear />
             </Field>
-            <Field label="Secret key env">
+            <Field label={t('secretKeyEnv')}>
               <Input value={s3.secret_access_key_env} onChange={(e) => setS3({ secret_access_key_env: e.target.value })} allowClear />
             </Field>
           </FormGrid>
-          <SwitchField label="Path style" checked={s3.path_style} onChange={(pathStyle) => setS3({ path_style: pathStyle })} />
+          <SwitchField label={t('pathStyle')} checked={s3.path_style} onChange={(pathStyle) => setS3({ path_style: pathStyle })} />
         </>
       ) : (
         <FormGrid>
-          <Field label="WebDAV URL">
+          <Field label={t('webdavUrl')}>
             <Input value={webdav.url} onChange={(e) => setWebDAV({ url: e.target.value })} allowClear />
           </Field>
-          <Field label="Root prefix">
+          <Field label={t('rootPrefix')}>
             <Input value={webdav.root_prefix} onChange={(e) => setWebDAV({ root_prefix: e.target.value })} allowClear />
           </Field>
-          <Field label="Username">
+          <Field label={t('webdavUsername')}>
             <Input value={webdav.username} onChange={(e) => setWebDAV({ username: e.target.value })} allowClear />
           </Field>
-          <Field label="Password env">
+          <Field label={t('webdavPasswordEnv')}>
             <Input value={webdav.password_env} onChange={(e) => setWebDAV({ password_env: e.target.value })} allowClear />
           </Field>
         </FormGrid>
@@ -1027,6 +1070,7 @@ function ScheduleModal({ editor, saving, onChange, onCancel, onSave }: {
   onCancel: () => void;
   onSave: (editor: Editor<Schedule>) => void;
 }) {
+  const { t } = useI18n();
   if (!editor) return null;
   const schedule = editor.value;
   const setSchedule = (value: Schedule) => onChange({ ...editor, value });
@@ -1034,7 +1078,7 @@ function ScheduleModal({ editor, saving, onChange, onCancel, onSave }: {
   return (
     <Modal
       open
-      title={editor.index < 0 ? 'Add schedule' : 'Edit schedule'}
+      title={editor.index < 0 ? t('addScheduleTitle') : t('editScheduleTitle')}
       typewriter={false}
       width={640}
       onClose={onCancel}
@@ -1042,34 +1086,44 @@ function ScheduleModal({ editor, saving, onChange, onCancel, onSave }: {
     >
       <div className="editor-form">
         <FormGrid>
-          <Field label="Key">
+          <Field label={t('key')}>
             <Input value={schedule.key} onChange={(e) => set({ key: keyify(e.target.value) })} allowClear />
           </Field>
-          <Field label="Name">
+          <Field label={t('name')}>
             <Input value={schedule.name} onChange={(e) => set({ name: e.target.value })} allowClear />
           </Field>
         </FormGrid>
-        <SwitchField label="Enabled" checked={schedule.enabled} onChange={(enabled) => set({ enabled })} />
+        <SwitchField label={t('enabled')} checked={schedule.enabled} onChange={(enabled) => set({ enabled })} />
         <FormGrid>
-          <Field label="Type">
+          <Field label={t('type')}>
             <Select
               value={schedule.type}
-              onChange={(type) => set({ type: type as ScheduleType })}
+              onChange={(type) => {
+                const nextType = type as ScheduleType;
+                set({ type: nextType, run_at: nextType === 'once' && !schedule.run_at ? defaultRunAt() : schedule.run_at });
+              }}
               options={[
-                { key: 'daily', label: 'Daily' },
-                { key: 'weekly', label: 'Weekly' }
+                { key: 'daily', label: t('daily') },
+                { key: 'weekly', label: t('weekly') },
+                { key: 'once', label: t('once') }
               ]}
             />
           </Field>
-          <Field label="Time">
-            <Input type="time" value={schedule.time} onChange={(e) => set({ time: e.target.value })} />
-          </Field>
+          {schedule.type === 'once' ? (
+            <Field label={t('runAtServerTZ')}>
+              <Input type="datetime-local" value={schedule.run_at || ''} onChange={(e) => set({ run_at: e.target.value })} />
+            </Field>
+          ) : (
+            <Field label={t('time')}>
+              <Input type="time" value={schedule.time} onChange={(e) => set({ time: e.target.value })} />
+            </Field>
+          )}
           {schedule.type === 'weekly' && (
-            <Field label="Weekday">
+            <Field label={t('weekday')}>
               <Select
                 value={schedule.weekday || 'sunday'}
                 onChange={(weekday) => set({ weekday })}
-                options={weekdayOptions}
+                options={weekdayOptions(t)}
               />
             </Field>
           )}
@@ -1087,6 +1141,7 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
   onCancel: () => void;
   onSave: (editor: Editor<Task>) => void;
 }) {
+  const { t } = useI18n();
   if (!editor) return null;
   const task = editor.value;
   const setTask = (value: Task) => onChange({ ...editor, value });
@@ -1099,7 +1154,7 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
   return (
     <Modal
       open
-      title={editor.index < 0 ? 'Add task' : 'Edit task'}
+      title={editor.index < 0 ? t('addTaskTitle') : t('editTaskTitle')}
       typewriter={false}
       width={780}
       onClose={onCancel}
@@ -1107,37 +1162,37 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
     >
       <div className="editor-form">
         <FormGrid>
-          <Field label="Key">
+          <Field label={t('key')}>
             <Input value={task.key} onChange={(e) => set({ key: keyify(e.target.value) })} allowClear />
           </Field>
-          <Field label="Name">
+          <Field label={t('name')}>
             <Input value={task.name} onChange={(e) => set({ name: e.target.value })} allowClear />
           </Field>
         </FormGrid>
-        <SwitchField label="Enabled" checked={task.enabled} onChange={(enabled) => set({ enabled })} />
+        <SwitchField label={t('enabled')} checked={task.enabled} onChange={(enabled) => set({ enabled })} />
         <FormGrid>
-          <Field label="Source">
+          <Field label={t('source')}>
             <Select
               value={task.source_key}
               onChange={(sourceKey) => set({ source_key: sourceKey })}
               options={cfg.sources.map((source) => ({ key: source.key, label: source.name }))}
               disabled={cfg.sources.length === 0}
-              placeholder="No sources"
+              placeholder={t('noSources')}
             />
           </Field>
-          <Field label="Schedule">
+          <Field label={t('schedule')}>
             <Select
               value={task.schedule_key}
               onChange={(scheduleKey) => set({ schedule_key: scheduleKey })}
               options={cfg.schedules.map((schedule) => ({ key: schedule.key, label: schedule.name }))}
               disabled={cfg.schedules.length === 0}
-              placeholder="No schedules"
+              placeholder={t('noSchedules')}
             />
           </Field>
         </FormGrid>
-        <Field label="Targets">
+        <Field label={t('targets')}>
           {cfg.targets.length === 0 ? (
-            <p className="muted">No targets.</p>
+            <p className="muted">{t('noTargets')}</p>
           ) : (
             <Checkbox
               value={task.target_keys}
@@ -1147,7 +1202,7 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
             />
           )}
         </Field>
-        <Field label="Object prefix">
+        <Field label={t('objectPrefix')}>
           <Input value={task.object_prefix} onChange={(e) => set({ object_prefix: e.target.value })} allowClear />
         </Field>
         {isNowledgeMemSource && (
@@ -1159,9 +1214,9 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
           />
         )}
         <RetentionFields retention={defaultRetention(task.retention)} onChange={setRetention} />
-        <SwitchField label="Encrypt package" checked={task.encryption.enabled} onChange={(enabled) => setEncryption({ enabled })} />
+        <SwitchField label={t('encryptPackage')} checked={task.encryption.enabled} onChange={(enabled) => setEncryption({ enabled })} />
         {task.encryption.enabled && (
-          <Field label="Password env">
+          <Field label={t('passwordEnv')}>
             <Input value={task.encryption.password_env} onChange={(e) => setEncryption({ password_env: e.target.value })} allowClear />
           </Field>
         )}
@@ -1171,42 +1226,43 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
 }
 
 function RetentionFields({ retention, onChange }: { retention: Retention; onChange: (patch: Partial<Retention>) => void }) {
+  const { t } = useI18n();
   return (
     <div className="retention-box">
-      <Field label="Remote backup retention">
+      <Field label={t('remoteBackupRetention')}>
         <Select
           value={retention.mode}
           onChange={(mode) => onChange({ mode: mode as Retention['mode'] })}
           options={[
-            { key: 'none', label: 'Do not clean remote backups' },
-            { key: 'keep_last', label: 'Keep latest N backups' },
-            { key: 'keep_days', label: 'Keep recent N days' },
-            { key: 'keep_after', label: 'Keep backups after date' },
-            { key: 'keep_before', label: 'Keep backups before date' }
+            { key: 'none', label: t('retentionNone') },
+            { key: 'keep_last', label: t('retentionKeepLast') },
+            { key: 'keep_days', label: t('retentionKeepDays') },
+            { key: 'keep_after', label: t('retentionKeepAfter') },
+            { key: 'keep_before', label: t('retentionKeepBefore') }
           ]}
         />
       </Field>
       {retention.mode === 'keep_last' && (
-        <Field label="Backups to keep">
+        <Field label={t('backupsToKeep')}>
           <Input type="number" min={1} value={String(retention.keep_last || 7)} onChange={(e) => onChange({ keep_last: Number(e.target.value) || 1 })} />
         </Field>
       )}
       {retention.mode === 'keep_days' && (
-        <Field label="Days to keep">
+        <Field label={t('daysToKeep')}>
           <Input type="number" min={1} value={String(retention.keep_days || 30)} onChange={(e) => onChange({ keep_days: Number(e.target.value) || 1 })} />
         </Field>
       )}
       {retention.mode === 'keep_after' && (
-        <Field label="Keep after">
+        <Field label={t('keepAfter')}>
           <Input type="date" value={retention.keep_after || ''} onChange={(e) => onChange({ keep_after: e.target.value })} />
         </Field>
       )}
       {retention.mode === 'keep_before' && (
-        <Field label="Keep before">
+        <Field label={t('keepBefore')}>
           <Input type="date" value={retention.keep_before || ''} onChange={(e) => onChange({ keep_before: e.target.value })} />
         </Field>
       )}
-      <p className="muted">Cleanup is limited to this task's object prefix under each target root prefix.</p>
+      <p className="muted">{t('retentionScopeNote')}</p>
     </div>
   );
 }
@@ -1217,16 +1273,17 @@ function ExportFields({ value, overridden, onChange, onReset }: {
   onChange: (next: ExportConfig) => void;
   onReset: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="export-box">
       <div className="export-box-head">
-        <span>Export contents</span>
-        {overridden && <Button type="default" size="small" onClick={onReset}>Use defaults</Button>}
+        <span>{t('exportContents')}</span>
+        {overridden && <Button type="default" size="small" onClick={onReset}>{t('useDefaults')}</Button>}
       </div>
       <Checkbox
         value={exportSelectedValues(value)}
         onChange={(values) => onChange(exportConfigFromSelected(values.map(String)))}
-        options={exportOptions.map((option) => ({ label: option.label, value: option.key }))}
+        options={exportFlags.map((key) => ({ label: t(`export.${key}`), value: key }))}
         direction="vertical"
       />
     </div>
@@ -1234,10 +1291,11 @@ function ExportFields({ value, overridden, onChange, onReset }: {
 }
 
 function ModalFooter({ saving, onCancel, onSave }: { saving: boolean; onCancel: () => void; onSave: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="modal-footer">
-      <Button type="default" onClick={onCancel}>Cancel</Button>
-      <Button type="primary" loading={saving} onClick={onSave}>Save</Button>
+      <Button type="default" onClick={onCancel}>{t('cancel')}</Button>
+      <Button type="primary" loading={saving} onClick={onSave}>{t('save')}</Button>
     </div>
   );
 }
@@ -1252,10 +1310,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function SwitchField({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  const { t } = useI18n();
   return (
     <div className="switch-field">
       <span>{label}</span>
-      <Switch checked={checked} onChange={onChange} checkedChildren="ON" unCheckedChildren="OFF" />
+      <Switch checked={checked} onChange={onChange} checkedChildren={t('on')} unCheckedChildren={t('off')} />
     </div>
   );
 }
@@ -1280,10 +1339,10 @@ function normalizeConfig(cfg: Config): Config {
   };
 }
 
-function defaultSource(index: number, roots: SourceRoot[]): Source {
+function defaultSource(index: number, roots: SourceRoot[], t: Translate): Source {
   return {
     key: `source-${index + 1}`,
-    name: `Source ${index + 1}`,
+    name: `${t('sourceDefault')} ${index + 1}`,
     enabled: true,
     type: 'nowledgemem_api',
     nowledge_mem: {
@@ -1297,10 +1356,10 @@ function defaultSource(index: number, roots: SourceRoot[]): Source {
   };
 }
 
-function defaultTarget(index: number): Target {
+function defaultTarget(index: number, t: Translate): Target {
   return {
     key: `target-${index + 1}`,
-    name: `Target ${index + 1}`,
+    name: `${t('targetDefault')} ${index + 1}`,
     enabled: true,
     type: 's3',
     s3: {
@@ -1321,22 +1380,23 @@ function defaultTarget(index: number): Target {
   };
 }
 
-function defaultSchedule(index: number): Schedule {
+function defaultSchedule(index: number, t: Translate): Schedule {
   return {
     key: `schedule-${index + 1}`,
-    name: `Schedule ${index + 1}`,
+    name: `${t('scheduleDefault')} ${index + 1}`,
     enabled: true,
     type: 'daily',
     time: '03:00',
-    weekday: 'sunday'
+    weekday: 'sunday',
+    run_at: defaultRunAt()
   };
 }
 
-function defaultTask(cfg: Config): Task {
+function defaultTask(cfg: Config, t: Translate): Task {
   const next = cfg.tasks.length + 1;
   return {
     key: `task-${next}`,
-    name: `Task ${next}`,
+    name: `${t('taskDefault')} ${next}`,
     enabled: true,
     source_key: cfg.sources[0]?.key ?? '',
     schedule_key: cfg.schedules[0]?.key ?? '',
@@ -1389,12 +1449,12 @@ function hasExportOverride(task: Task) {
 }
 
 function exportSelectedValues(value: ExportConfig) {
-  return exportOptions.filter((option) => value[option.key] === true).map((option) => option.key);
+  return exportFlags.filter((key) => value[key] === true);
 }
 
 function exportConfigFromSelected(values: string[]): ExportConfig {
   const selected = new Set(values);
-  return Object.fromEntries(exportOptions.map((option) => [option.key, selected.has(option.key)])) as ExportConfig;
+  return Object.fromEntries(exportFlags.map((key) => [key, selected.has(key)])) as ExportConfig;
 }
 
 function defaultNowledge(source: Source) {
@@ -1457,20 +1517,47 @@ function defaultRetention(retention?: Retention): Retention {
   };
 }
 
-function retentionLabel(retention?: Retention) {
+function retentionLabel(retention: Retention | undefined, t: Translate) {
   const value = defaultRetention(retention);
   switch (value.mode) {
     case 'keep_last':
-      return `keep latest ${value.keep_last || 7}`;
+      return `${t('retentionLabelLatest')} ${value.keep_last || 7}`;
     case 'keep_days':
-      return `keep ${value.keep_days || 30} days`;
+      return `${t('retentionLabelDays')} ${value.keep_days || 30}`;
     case 'keep_after':
-      return `keep after ${value.keep_after || 'date'}`;
+      return `${t('retentionLabelAfter')} ${value.keep_after || t('date')}`;
     case 'keep_before':
-      return `keep before ${value.keep_before || 'date'}`;
+      return `${t('retentionLabelBefore')} ${value.keep_before || t('date')}`;
     default:
-      return 'no cleanup';
+      return t('retentionLabelNone');
   }
+}
+
+function scheduleLabel(schedule: Schedule, t: Translate) {
+  switch (schedule.type) {
+    case 'weekly':
+      return `${t('scheduleWeeklyAt')} ${weekdayLabel(schedule.weekday || 'sunday', t)} ${t('at')} ${schedule.time}`;
+    case 'once':
+      return `${t('scheduleOnceAt')} ${schedule.run_at || t('notSet')}`;
+    default:
+      return `${t('scheduleDailyAt')} ${schedule.time}`;
+  }
+}
+
+function weekdayLabel(weekday: string, t: Translate) {
+  return t(`weekday.${weekday || 'sunday'}`);
+}
+
+function statusLabel(status: string, t: Translate) {
+  const key = `status${status.charAt(0).toUpperCase()}${status.slice(1)}`;
+  const label = t(key);
+  return label === key ? status : label;
+}
+
+function defaultRunAt() {
+  const next = new Date(Date.now() + 60 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:${pad(next.getMinutes())}`;
 }
 
 function readFileAsDataURL(file: File) {
@@ -1503,29 +1590,26 @@ function formatBytes(value: number) {
   return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-const weekdayOptions = [
-  { key: 'sunday', label: 'Sunday' },
-  { key: 'monday', label: 'Monday' },
-  { key: 'tuesday', label: 'Tuesday' },
-  { key: 'wednesday', label: 'Wednesday' },
-  { key: 'thursday', label: 'Thursday' },
-  { key: 'friday', label: 'Friday' },
-  { key: 'saturday', label: 'Saturday' }
-];
+function weekdayOptions(t: Translate) {
+  return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map((key) => ({
+    key,
+    label: t(`weekday.${key}`)
+  }));
+}
 
-const exportOptions: Array<{ key: ExportFlag; label: string }> = [
-  { key: 'include_memories', label: 'Memories' },
-  { key: 'include_threads', label: 'Threads' },
-  { key: 'include_messages', label: 'Messages' },
-  { key: 'include_entities', label: 'Entities' },
-  { key: 'include_labels', label: 'Labels' },
-  { key: 'include_sources', label: 'Sources' },
-  { key: 'include_communities', label: 'Communities' },
-  { key: 'include_skills', label: 'Skills' },
-  { key: 'include_edges', label: 'Graph edges' },
-  { key: 'include_working_memory', label: 'Working Memory' },
-  { key: 'include_working_memory_archive', label: 'Working Memory archive' },
-  { key: 'include_source_files', label: 'Original source files' }
+const exportFlags: ExportFlag[] = [
+  'include_memories',
+  'include_threads',
+  'include_messages',
+  'include_entities',
+  'include_labels',
+  'include_sources',
+  'include_communities',
+  'include_skills',
+  'include_edges',
+  'include_working_memory',
+  'include_working_memory_archive',
+  'include_source_files'
 ];
 
 createRoot(document.getElementById('root')!).render(<Root />);

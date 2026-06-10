@@ -11,15 +11,16 @@ import (
 )
 
 type Scheduler struct {
-	cfg    config.Config
-	runner *backup.Runner
-	logger *slog.Logger
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	cfg        config.Config
+	runner     *backup.Runner
+	logger     *slog.Logger
+	onOnceDone func(taskKey string) error
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
 }
 
-func New(cfg config.Config, runner *backup.Runner, logger *slog.Logger) *Scheduler {
-	return &Scheduler{cfg: cfg, runner: runner, logger: logger}
+func New(cfg config.Config, runner *backup.Runner, logger *slog.Logger, onOnceDone func(taskKey string) error) *Scheduler {
+	return &Scheduler{cfg: cfg, runner: runner, logger: logger, onOnceDone: onOnceDone}
 }
 
 func (s *Scheduler) Start(parent context.Context) {
@@ -52,7 +53,12 @@ func (s *Scheduler) Stop() {
 
 func (s *Scheduler) loop(ctx context.Context, task config.TaskConfig, schedule config.ScheduleConfig) {
 	for {
-		next := nextRun(time.Now(), schedule)
+		next, ok := nextRun(time.Now().In(time.Local), schedule)
+		if !ok {
+			s.logger.Warn("scheduled backup skipped", "task", task.Key, "schedule", schedule.Key, "type", schedule.Type, "reason", "invalid schedule")
+			return
+		}
+		s.logger.Info("scheduled backup waiting", "task", task.Key, "schedule", schedule.Key, "type", schedule.Type, "next", next, "timezone", next.Location().String())
 		timer := time.NewTimer(time.Until(next))
 		select {
 		case <-ctx.Done():
@@ -67,14 +73,33 @@ func (s *Scheduler) loop(ctx context.Context, task config.TaskConfig, schedule c
 			} else {
 				s.logger.Info("scheduled backup finished", "task", task.Key, "run", run.ID, "status", run.Status)
 			}
+			if schedule.Type == "once" {
+				if s.onOnceDone != nil {
+					if err := s.onOnceDone(task.Key); err != nil {
+						s.logger.Warn("failed to disable one-time task", "task", task.Key, "schedule", schedule.Key, "error", err)
+					} else {
+						s.logger.Info("one-time task disabled", "task", task.Key, "schedule", schedule.Key)
+					}
+				}
+				return
+			}
 		}
 	}
 }
 
-func nextRun(now time.Time, schedule config.ScheduleConfig) time.Time {
+func nextRun(now time.Time, schedule config.ScheduleConfig) (time.Time, bool) {
 	hour, minute, _ := config.ParseClock(schedule.Time)
 	base := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
 	switch schedule.Type {
+	case "once":
+		runAt, err := config.ParseScheduleRunAt(schedule.RunAt, now.Location())
+		if err != nil {
+			return time.Time{}, false
+		}
+		if runAt.Before(now) {
+			return now, true
+		}
+		return runAt, true
 	case "weekly":
 		weekday, _ := config.ParseWeekday(schedule.Weekday)
 		days := (int(weekday) - int(base.Weekday()) + 7) % 7
@@ -82,11 +107,11 @@ func nextRun(now time.Time, schedule config.ScheduleConfig) time.Time {
 		if !next.After(now) {
 			next = next.AddDate(0, 0, 7)
 		}
-		return next
+		return next, true
 	default:
 		if !base.After(now) {
 			base = base.AddDate(0, 0, 1)
 		}
-		return base
+		return base, true
 	}
 }

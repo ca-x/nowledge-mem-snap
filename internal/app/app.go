@@ -22,11 +22,16 @@ import (
 
 func Run(web embed.FS, args []string) int {
 	logger := newLogger(dataDir())
+	if len(args) > 1 && args[1] == "version" {
+		fmt.Println(version.Full())
+		return 0
+	}
+	if err := configureTimezone(logger); err != nil {
+		logger.Error("timezone invalid", "error", err)
+		return 1
+	}
 	if len(args) > 1 {
 		switch args[1] {
-		case "version":
-			fmt.Println(version.Full())
-			return 0
 		case "validate":
 			_, _, err := load(logger)
 			if err != nil {

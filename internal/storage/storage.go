@@ -117,6 +117,7 @@ func ApplyRetention(ctx context.Context, target Target, task config.TaskConfig, 
 	})
 
 	cut := make(map[string]struct{})
+	loc := time.Local
 	switch retention.Mode {
 	case "keep_last":
 		for i, object := range objects {
@@ -125,14 +126,14 @@ func ApplyRetention(ctx context.Context, target Target, task config.TaskConfig, 
 			}
 		}
 	case "keep_days":
-		cutoff := now.UTC().AddDate(0, 0, -retention.KeepDays)
+		cutoff := now.In(loc).AddDate(0, 0, -retention.KeepDays)
 		for _, object := range objects {
 			if object.ModTime.Before(cutoff) {
 				cut[object.Name] = struct{}{}
 			}
 		}
 	case "keep_after":
-		cutoff, err := parseRetentionDate(retention.KeepAfter)
+		cutoff, err := parseRetentionDate(retention.KeepAfter, loc)
 		if err != nil {
 			return 0, err
 		}
@@ -142,12 +143,12 @@ func ApplyRetention(ctx context.Context, target Target, task config.TaskConfig, 
 			}
 		}
 	case "keep_before":
-		cutoff, err := parseRetentionDate(retention.KeepBefore)
+		cutoff, err := parseRetentionDate(retention.KeepBefore, loc)
 		if err != nil {
 			return 0, err
 		}
 		for _, object := range objects {
-			if object.ModTime.After(cutoff) {
+			if !object.ModTime.Before(cutoff) {
 				cut[object.Name] = struct{}{}
 			}
 		}
@@ -205,16 +206,19 @@ func isBackupObject(name string) bool {
 	return strings.HasSuffix(name, archive.PlainExtension) || strings.HasSuffix(name, archive.EncryptedExtension)
 }
 
-func parseRetentionDate(raw string) (time.Time, error) {
+func parseRetentionDate(raw string, loc *time.Location) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return time.Time{}, fmt.Errorf("retention date is required")
 	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return t.UTC(), nil
+	if loc == nil {
+		loc = time.Local
 	}
-	if t, err := time.Parse("2006-01-02", raw); err == nil {
-		return t.UTC(), nil
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02", raw, loc); err == nil {
+		return t, nil
 	}
 	return time.Time{}, fmt.Errorf("retention date must use YYYY-MM-DD or RFC3339")
 }

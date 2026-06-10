@@ -58,12 +58,32 @@ func (m *Manager) Reload(tenant string) {
 	}
 	historyStore := history.NewStoreWithRetention(m.store.Client(), tenant, cfg.HistoryLimit, cfg.HistoryRetentionDays)
 	runner := backup.NewRunner(cfg, historyStore, m.logger)
-	sched := New(cfg, runner, m.logger)
+	sched := New(cfg, runner, m.logger, func(taskKey string) error {
+		return m.disableTask(tenant, taskKey)
+	})
 	sched.Start(m.ctx)
 
 	m.mu.Lock()
 	m.schedulers[tenant] = sched
 	m.mu.Unlock()
+}
+
+func (m *Manager) disableTask(tenant string, taskKey string) error {
+	cfg, err := m.store.LoadUser(tenant)
+	if err != nil {
+		return err
+	}
+	for i := range cfg.Tasks {
+		if cfg.Tasks[i].Key != taskKey {
+			continue
+		}
+		if !cfg.Tasks[i].Enabled {
+			return nil
+		}
+		cfg.Tasks[i].Enabled = false
+		return m.store.SaveUser(tenant, cfg)
+	}
+	return nil
 }
 
 func (m *Manager) Stop() {

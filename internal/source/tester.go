@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"time"
 
 	mem "github.com/lib-x/nowledgemem-go"
+	"github.com/spf13/afero"
 
 	"github.com/lib-x/nowledge-mem-snap/internal/config"
 )
@@ -92,18 +92,16 @@ func testDirectory(source config.DirectorySource) TestResult {
 	if err := config.ValidateDirectorySource(source); err != nil {
 		return TestResult{OK: false, Message: err.Error()}
 	}
-	root, err := filepath.Abs(source.Path)
-	if err != nil {
-		return TestResult{OK: false, Message: err.Error()}
-	}
-	info, err := os.Stat(root)
+	root := filepath.Clean(source.Path)
+	fs := afero.NewReadOnlyFs(afero.NewBasePathFs(afero.NewOsFs(), root))
+	info, err := fs.Stat(".")
 	if err != nil {
 		return TestResult{OK: false, Message: "directory is not readable: " + err.Error()}
 	}
 	if !info.IsDir() {
 		return TestResult{OK: false, Message: fmt.Sprintf("%s is not a directory", source.Path)}
 	}
-	entries, err := os.ReadDir(root)
+	entries, err := afero.ReadDir(fs, ".")
 	if err != nil {
 		return TestResult{OK: false, Message: "directory cannot be listed: " + err.Error()}
 	}

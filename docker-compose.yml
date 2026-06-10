@@ -13,6 +13,7 @@ services:
       # - ./config:/mem-config:ro
     environment:
       - PORT=14335
+      # Schedule times and date-only retention boundaries use this timezone.
       - TZ=UTC
       # Optional database override. Default is /app/data/data.db.
       # - NMEM_SNAP_DATABASE_URL=file:/app/data/data.db?cache=shared&_pragma=foreign_keys(1)

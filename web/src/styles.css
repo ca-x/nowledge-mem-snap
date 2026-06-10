@@ -62,9 +62,26 @@ code {
 }
 
 .auth-card {
+  position: relative;
   width: min(100%, 440px);
   padding: 28px;
   text-align: center;
+}
+
+.auth-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 2px solid rgba(49, 80, 92, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.46);
 }
 
 .auth-card h1,

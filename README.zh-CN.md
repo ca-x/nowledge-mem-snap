@@ -20,7 +20,7 @@ Nowledge Mem Snap 是一个自托管的 Nowledge Mem 备份服务。
 - Target：
   - S3/R2 兼容存储，基于 `github.com/fclairamb/afero-s3`。
   - WebDAV，基于 `github.com/lib-x/aferodav` 和本项目的 HTTP WebDAV 适配。
-- 定时任务：支持每天、每周。
+- 定时任务：支持每天、每周、单次执行；执行时间按进程 `TZ` 解释。
 - 每个任务可选 AES-GCM 加密备份包。
 - 每个任务可配置远端备份清理策略：不清理、保留最近 N 份、保留最近 N 天、保留某日期之后、保留某日期之前。
 - 运行历史按条数和天数自动清理，避免数据库无限膨胀。
@@ -39,14 +39,12 @@ docker compose up -d
 GitHub Actions 会自动构建并推送镜像到 Docker Hub 和 GitHub Container Registry：
 
 ```bash
-docker pull czyt/nowledge-mem-snap:latest
-docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
+docker pull czyt/nowledge-mem-snap:v0.1.0
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.0
 ```
 
 镜像标签规则：
 
-- `latest`：默认分支推送时生成。
-- `main`：`main` 分支推送时生成。
 - `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.0`。
 - `sha-<commit>`：不可变的 commit 镜像。
 
@@ -55,6 +53,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 ```bash
 DATA_DIR=/app/data
 PORT=14335
+TZ=UTC
 NMEM_SNAP_DATABASE_URL=
 
 # 可选：自动初始化第一个管理员。留空则使用页面设置向导。
@@ -104,6 +103,15 @@ environment:
 - Task `object_prefix`：该任务自己的对象路径模板，例如 `nowledge-mem/{task}/{timestamp}`。
 
 自动清理远端备份时，只会扫描 `target.root_prefix + task.object_prefix` 推导出的稳定任务目录，并且只删除 `.zip` 或 `.zip.aes.json` 备份对象，不会扫描整个 bucket 或 WebDAV 根目录。
+
+时间语义：
+
+- 程序启动时读取 `TZ`。二进制内嵌 IANA timezone data，所以在极简容器里也可以使用 `Asia/Shanghai` 这类时区名。
+- 每天、每周定时任务按 `TZ` 计算。
+- 单次任务的 `run_at` 使用 `YYYY-MM-DDTHH:MM` 格式，默认按 `TZ` 解释；如果填 RFC3339 且带 offset，则按 offset 解释。单次任务执行后会自动禁用对应 task。
+- `keep_days` 按 `TZ` 的本地时间计算。
+- 日期型 `keep_after` 会保留该本地日期 00:00 起及之后的备份。
+- 日期型 `keep_before` 只保留该本地日期 00:00 之前的备份。
 
 ## 本地开发
 
