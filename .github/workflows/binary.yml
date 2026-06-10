@@ -145,15 +145,25 @@ jobs:
       - name: List release assets
         run: ls -lah release-assets
       - name: Create draft release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          body: |
-            ## Downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s\n' \
+            '## Downloads' \
+            '' \
+            'Download the archive for your platform, extract it, and run `nowledge-mem-snap`.' \
+            '' \
+            'Docker images are published separately by the Docker Build and Push workflow.' \
+            > release-notes.md
 
-            Download the archive for your platform, extract it, and run `nowledge-mem-snap`.
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md
 
-            Docker images are published separately by the Docker Build and Push workflow.
-          files: release-assets/*
+          for file in release-assets/*; do
+            gh release upload "$GITHUB_REF_NAME" "$file" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          done

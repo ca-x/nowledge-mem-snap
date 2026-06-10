@@ -41,13 +41,13 @@ Open `http://localhost:14335`. If no admin env vars are set, the setup wizard cr
 Published images are built by GitHub Actions and pushed to Docker Hub and GitHub Container Registry:
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.2
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.2
+docker pull czyt/nowledge-mem-snap:v0.1.3
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.3
 ```
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.2`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.3`.
 - `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 
