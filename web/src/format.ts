@@ -1,6 +1,6 @@
 import type { Translate } from './i18n';
 import { defaultRetention } from './configDefaults';
-import type { Retention, Schedule } from './types';
+import type { Retention, Schedule, TaskRuntime } from './types';
 
 export function retentionLabel(retention: Retention | undefined, t: Translate) {
   const value = defaultRetention(retention);
@@ -37,6 +37,28 @@ export function statusLabel(status: string, t: Translate) {
   const key = `status${status.charAt(0).toUpperCase()}${status.slice(1)}`;
   const label = t(key);
   return label === key ? status : label;
+}
+
+export function taskRuntimeLabel(runtime: TaskRuntime | undefined, locale: string, t: Translate) {
+  if (!runtime) return t('taskRuntimeUnknown');
+  switch (runtime.status) {
+    case 'scheduled':
+      return runtime.next_run_at
+        ? `${t('nextRun')}: ${new Date(runtime.next_run_at).toLocaleString(locale)}`
+        : t('taskRuntimeInvalidSchedule');
+    case 'running':
+      return t('taskRuntimeRunning');
+    case 'disabled':
+      return t('taskRuntimeDisabled');
+    case 'schedule_disabled':
+      return t('taskRuntimeScheduleDisabled');
+    case 'missing_schedule':
+      return t('taskRuntimeMissingSchedule');
+    case 'invalid_schedule':
+      return t('taskRuntimeInvalidSchedule');
+    default:
+      return t('taskRuntimeUnknown');
+  }
 }
 
 export function formatBytes(value: number) {

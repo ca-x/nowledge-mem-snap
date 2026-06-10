@@ -27,9 +27,10 @@ type Server struct {
 	web             embed.FS
 	logger          *slog.Logger
 	onConfigChanged func(tenant string)
+	taskRuntime     func(tenant string) map[string]config.TaskRuntime
 }
 
-func New(ctx context.Context, cfg config.Config, store *config.Store, web embed.FS, logger *slog.Logger, onConfigChanged func(tenant string)) (*Server, error) {
+func New(ctx context.Context, cfg config.Config, store *config.Store, web embed.FS, logger *slog.Logger, onConfigChanged func(tenant string), taskRuntime func(tenant string) map[string]config.TaskRuntime) (*Server, error) {
 	auth, err := NewAuth(ctx, cfg.Auth, store)
 	if err != nil {
 		return nil, err
@@ -41,6 +42,7 @@ func New(ctx context.Context, cfg config.Config, store *config.Store, web embed.
 		web:             web,
 		logger:          logger,
 		onConfigChanged: onConfigChanged,
+		taskRuntime:     taskRuntime,
 	}, nil
 }
 
@@ -136,7 +138,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, config.Redacted(cfg))
+		writeJSON(w, http.StatusOK, s.withTaskRuntime(claims.Tenant, config.Redacted(cfg)))
 	case http.MethodPut:
 		var cfg config.Config
 		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
@@ -155,10 +157,17 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, config.Redacted(loaded))
+		writeJSON(w, http.StatusOK, s.withTaskRuntime(claims.Tenant, config.Redacted(loaded)))
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) withTaskRuntime(tenant string, cfg config.Config) config.Config {
+	if s.taskRuntime != nil {
+		cfg.TaskRuntime = s.taskRuntime(tenant)
+	}
+	return cfg
 }
 
 func (s *Server) handleSourceRoots(w http.ResponseWriter, r *http.Request) {

@@ -37,6 +37,7 @@ type Config struct {
 	Listen               ListenConfig           `json:"listen"`
 	Auth                 AuthConfig             `json:"auth"`
 	Runtime              RuntimeConfig          `json:"runtime,omitempty"`
+	TaskRuntime          map[string]TaskRuntime `json:"task_runtime,omitempty"`
 	Sources              []SourceConfig         `json:"sources"`
 	Schedules            []ScheduleConfig       `json:"schedules"`
 	Targets              []TargetConfig         `json:"targets"`
@@ -73,6 +74,20 @@ type AuthConfig struct {
 type RuntimeConfig struct {
 	Timezone      string `json:"timezone,omitempty"`
 	TimezoneLabel string `json:"timezone_label,omitempty"`
+}
+
+const (
+	TaskRuntimeStatusScheduled        = "scheduled"
+	TaskRuntimeStatusRunning          = "running"
+	TaskRuntimeStatusDisabled         = "disabled"
+	TaskRuntimeStatusScheduleDisabled = "schedule_disabled"
+	TaskRuntimeStatusMissingSchedule  = "missing_schedule"
+	TaskRuntimeStatusInvalidSchedule  = "invalid_schedule"
+)
+
+type TaskRuntime struct {
+	Status    string     `json:"status"`
+	NextRunAt *time.Time `json:"next_run_at,omitempty"`
 }
 
 type OIDCConfig struct {
@@ -612,6 +627,7 @@ func (s *Store) Save(cfg Config) error {
 	}
 	system := Redacted(cfg)
 	system.Runtime = RuntimeConfig{}
+	system.TaskRuntime = nil
 	system.Sources = nil
 	system.Schedules = nil
 	system.Targets = nil

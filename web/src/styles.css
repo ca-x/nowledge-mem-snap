@@ -376,6 +376,36 @@ code {
   line-height: 1.45;
 }
 
+.task-runtime {
+  margin: 8px 0;
+  padding: 6px 9px;
+  border: 1px solid rgba(196, 184, 158, 0.55);
+  border-radius: 8px;
+  background: rgba(247, 243, 223, 0.78);
+  color: var(--animal-text-body);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.task-runtime.scheduled {
+  border-color: rgba(111, 186, 44, 0.38);
+  background: rgba(111, 186, 44, 0.13);
+}
+
+.task-runtime.running {
+  border-color: rgba(75, 145, 210, 0.38);
+  background: rgba(75, 145, 210, 0.13);
+}
+
+.task-runtime.disabled,
+.task-runtime.schedule_disabled,
+.task-runtime.missing_schedule,
+.task-runtime.invalid_schedule,
+.task-runtime.unknown {
+  background: rgba(247, 243, 223, 0.58);
+  color: var(--animal-text-muted);
+}
+
 .tag-list {
   display: flex;
   flex-wrap: wrap;

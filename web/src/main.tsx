@@ -437,6 +437,8 @@ function Dashboard() {
           schedules={cfg.schedules}
           exportOptions={cfg.export_options}
           backupStrategies={cfg.backup_strategies}
+          taskRuntime={cfg.task_runtime ?? {}}
+          locale={localeForLang(lang)}
           onAdd={() => setTaskEditor({ index: -1, value: defaultTask(cfg, t) })}
           onEdit={(task, index) => setTaskEditor({ index, value: cloneTask(task) })}
           onDelete={(index) => removeItem('tasks', index, t('taskDeleted'))}

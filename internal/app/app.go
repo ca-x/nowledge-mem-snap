@@ -95,7 +95,7 @@ func serve(web embed.FS, logger *slog.Logger) int {
 	schedulerManager.StartAll()
 	defer schedulerManager.Stop()
 
-	srv, err := server.New(ctx, cfg, store, web, logger, schedulerManager.Reload)
+	srv, err := server.New(ctx, cfg, store, web, logger, schedulerManager.Reload, schedulerManager.Snapshot)
 	if err != nil {
 		logger.Error("failed to initialize server", "error", err)
 		return 1

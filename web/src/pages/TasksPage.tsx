@@ -1,18 +1,20 @@
 import { Button, Card, Switch } from 'animal-island-ui';
 import { Pencil, Play, Trash2 } from 'lucide-react';
 
-import { retentionLabel } from '../format';
+import { retentionLabel, taskRuntimeLabel } from '../format';
 import { useI18n } from '../i18n';
 import { Empty, Panel } from '../components/ui';
-import type { BackupStrategy, ExportOption, Schedule, Source, Target, Task } from '../types';
+import type { BackupStrategy, ExportOption, Schedule, Source, Target, Task, TaskRuntime } from '../types';
 
-export function TasksPage({ tasks, sources, targets, schedules, exportOptions, backupStrategies, onAdd, onEdit, onDelete, onRun }: {
+export function TasksPage({ tasks, sources, targets, schedules, exportOptions, backupStrategies, taskRuntime, locale, onAdd, onEdit, onDelete, onRun }: {
   tasks: Task[];
   sources: Source[];
   targets: Target[];
   schedules: Schedule[];
   exportOptions: ExportOption[];
   backupStrategies: BackupStrategy[];
+  taskRuntime: Record<string, TaskRuntime>;
+  locale: string;
   onAdd: () => void;
   onEdit: (task: Task, index: number) => void;
   onDelete: (index: number) => void;
@@ -35,6 +37,7 @@ export function TasksPage({ tasks, sources, targets, schedules, exportOptions, b
                 </div>
                 <p>{t('source')}: {sources.find((s) => s.key === task.source_key)?.name ?? task.source_key}</p>
                 <p>{t('schedule')}: {schedules.find((s) => s.key === task.schedule_key)?.name ?? task.schedule_key}</p>
+                <p className={`task-runtime ${taskRuntime[task.key]?.status ?? 'unknown'}`}>{taskRuntimeLabel(taskRuntime[task.key], locale, t)}</p>
                 <p>{t('targets')}: {task.target_keys.map((k) => targets.find((target) => target.key === k)?.name ?? k).join(', ') || t('none')}</p>
                 <p>{t('exportOption')}: {exportName(task.export_option_key)}</p>
                 <p>{t('backupStrategy')}: {selectedStrategy?.name ?? task.backup_strategy_key} · {retentionLabel(selectedStrategy?.retention, t)}</p>

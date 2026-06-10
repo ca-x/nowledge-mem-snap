@@ -79,6 +79,11 @@ export type Task = {
   encryption: { enabled: boolean; password?: string; password_env?: string };
 };
 
+export type TaskRuntime = {
+  status: 'scheduled' | 'running' | 'disabled' | 'schedule_disabled' | 'missing_schedule' | 'invalid_schedule';
+  next_run_at?: string;
+};
+
 export type Retention = {
   mode: 'none' | 'keep_last' | 'keep_days' | 'keep_after' | 'keep_before';
   keep_last?: number;
@@ -97,6 +102,7 @@ export type Config = {
   history_limit: number;
   history_retention_days: number;
   runtime?: { timezone?: string; timezone_label?: string };
+  task_runtime?: Record<string, TaskRuntime>;
 };
 
 export type ExportOption = {

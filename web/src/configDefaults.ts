@@ -45,7 +45,8 @@ export function normalizeConfig(cfg: Config, t: Translate): Config {
     backup_strategies: backupStrategies,
     history_limit: cfg.history_limit || 100,
     history_retention_days: cfg.history_retention_days || 180,
-    runtime: cfg.runtime
+    runtime: cfg.runtime,
+    task_runtime: cfg.task_runtime ?? {}
   };
 }
 
