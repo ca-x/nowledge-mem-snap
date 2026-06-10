@@ -23,6 +23,21 @@ import './styles.css';
 type SourceType = 'nowledgemem_api' | 'directory';
 type TargetType = 's3' | 'webdav';
 type ScheduleType = 'daily' | 'weekly';
+type ExportFlag =
+  | 'include_memories'
+  | 'include_threads'
+  | 'include_messages'
+  | 'include_entities'
+  | 'include_labels'
+  | 'include_sources'
+  | 'include_communities'
+  | 'include_skills'
+  | 'include_edges'
+  | 'include_working_memory'
+  | 'include_working_memory_archive'
+  | 'include_source_files';
+
+type ExportConfig = Partial<Record<ExportFlag, boolean>>;
 
 type Source = {
   key: string;
@@ -79,7 +94,7 @@ type Task = {
   object_prefix: string;
   encryption: { enabled: boolean; password_env: string };
   retention: Retention;
-  export?: Record<string, unknown>;
+  export?: ExportConfig;
 };
 
 type Retention = {
@@ -91,7 +106,7 @@ type Retention = {
 };
 
 type Config = {
-  export?: Record<string, unknown>;
+  export?: ExportConfig;
   sources: Source[];
   targets: Target[];
   tasks: Task[];
@@ -685,6 +700,7 @@ function SettingsPanel({ profile, cfg, saving, onSaveProfile, onSaveConfig }: {
   const [draftProfile, setDraftProfile] = useState(profile);
   const [historyLimit, setHistoryLimit] = useState(String(cfg.history_limit));
   const [historyDays, setHistoryDays] = useState(String(cfg.history_retention_days));
+  const [exportDraft, setExportDraft] = useState<ExportConfig>(resolvedGlobalExport(cfg));
 
   useEffect(() => {
     setDraftProfile(profile);
@@ -693,7 +709,8 @@ function SettingsPanel({ profile, cfg, saving, onSaveProfile, onSaveConfig }: {
   useEffect(() => {
     setHistoryLimit(String(cfg.history_limit));
     setHistoryDays(String(cfg.history_retention_days));
-  }, [cfg.history_limit, cfg.history_retention_days]);
+    setExportDraft(resolvedGlobalExport(cfg));
+  }, [cfg]);
 
   const uploadAvatar = async (file?: File) => {
     if (!file) return;
@@ -744,6 +761,25 @@ function SettingsPanel({ profile, cfg, saving, onSaveProfile, onSaveConfig }: {
               })}
             >
               Save history settings
+            </Button>
+          </div>
+        </Card>
+
+        <Card color="app-yellow" className="settings-card wide">
+          <div className="settings-title"><FolderArchive size={20} /> Nowledge Mem export</div>
+          <div className="editor-form">
+            <ExportFields
+              value={exportDraft}
+              overridden
+              onChange={setExportDraft}
+              onReset={() => setExportDraft(defaultExportConfig())}
+            />
+            <Button
+              type="primary"
+              loading={saving}
+              onClick={() => onSaveConfig({ ...cfg, export: exportDraft })}
+            >
+              Save export defaults
             </Button>
           </div>
         </Card>
@@ -1057,6 +1093,9 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
   const set = (patch: Partial<Task>) => setTask({ ...task, ...patch });
   const setEncryption = (patch: Partial<Task['encryption']>) => set({ encryption: { ...task.encryption, ...patch } });
   const setRetention = (patch: Partial<Retention>) => set({ retention: { ...defaultRetention(task.retention), ...patch } });
+  const setExport = (value: ExportConfig) => set({ export: value });
+  const selectedSource = cfg.sources.find((source) => source.key === task.source_key);
+  const isNowledgeMemSource = selectedSource?.type === 'nowledgemem_api';
   return (
     <Modal
       open
@@ -1111,6 +1150,14 @@ function TaskModal({ editor, cfg, saving, onChange, onCancel, onSave }: {
         <Field label="Object prefix">
           <Input value={task.object_prefix} onChange={(e) => set({ object_prefix: e.target.value })} allowClear />
         </Field>
+        {isNowledgeMemSource && (
+          <ExportFields
+            value={resolvedTaskExport(task, cfg)}
+            overridden={hasExportOverride(task)}
+            onChange={setExport}
+            onReset={() => set({ export: {} })}
+          />
+        )}
         <RetentionFields retention={defaultRetention(task.retention)} onChange={setRetention} />
         <SwitchField label="Encrypt package" checked={task.encryption.enabled} onChange={(enabled) => setEncryption({ enabled })} />
         {task.encryption.enabled && (
@@ -1160,6 +1207,28 @@ function RetentionFields({ retention, onChange }: { retention: Retention; onChan
         </Field>
       )}
       <p className="muted">Cleanup is limited to this task's object prefix under each target root prefix.</p>
+    </div>
+  );
+}
+
+function ExportFields({ value, overridden, onChange, onReset }: {
+  value: ExportConfig;
+  overridden: boolean;
+  onChange: (next: ExportConfig) => void;
+  onReset: () => void;
+}) {
+  return (
+    <div className="export-box">
+      <div className="export-box-head">
+        <span>Export contents</span>
+        {overridden && <Button type="default" size="small" onClick={onReset}>Use defaults</Button>}
+      </div>
+      <Checkbox
+        value={exportSelectedValues(value)}
+        onChange={(values) => onChange(exportConfigFromSelected(values.map(String)))}
+        options={exportOptions.map((option) => ({ label: option.label, value: option.key }))}
+        direction="vertical"
+      />
     </div>
   );
 }
@@ -1284,6 +1353,50 @@ function defaultTask(cfg: Config): Task {
   };
 }
 
+function defaultExportConfig(): ExportConfig {
+  return {
+    include_memories: true,
+    include_threads: true,
+    include_messages: true,
+    include_entities: true,
+    include_labels: true,
+    include_sources: true,
+    include_communities: true,
+    include_skills: true,
+    include_edges: true,
+    include_working_memory: true,
+    include_working_memory_archive: false,
+    include_source_files: false
+  };
+}
+
+function resolvedTaskExport(task: Task, cfg: Config): ExportConfig {
+  return {
+    ...resolvedGlobalExport(cfg),
+    ...(task.export ?? {})
+  };
+}
+
+function resolvedGlobalExport(cfg: Config): ExportConfig {
+  return {
+    ...defaultExportConfig(),
+    ...(cfg.export ?? {})
+  };
+}
+
+function hasExportOverride(task: Task) {
+  return Object.keys(task.export ?? {}).length > 0;
+}
+
+function exportSelectedValues(value: ExportConfig) {
+  return exportOptions.filter((option) => value[option.key] === true).map((option) => option.key);
+}
+
+function exportConfigFromSelected(values: string[]): ExportConfig {
+  const selected = new Set(values);
+  return Object.fromEntries(exportOptions.map((option) => [option.key, selected.has(option.key)])) as ExportConfig;
+}
+
 function defaultNowledge(source: Source) {
   return source.nowledge_mem ?? { api_url: 'http://127.0.0.1:14242', api_key_env: 'NMEM_API_KEY' };
 }
@@ -1398,6 +1511,21 @@ const weekdayOptions = [
   { key: 'thursday', label: 'Thursday' },
   { key: 'friday', label: 'Friday' },
   { key: 'saturday', label: 'Saturday' }
+];
+
+const exportOptions: Array<{ key: ExportFlag; label: string }> = [
+  { key: 'include_memories', label: 'Memories' },
+  { key: 'include_threads', label: 'Threads' },
+  { key: 'include_messages', label: 'Messages' },
+  { key: 'include_entities', label: 'Entities' },
+  { key: 'include_labels', label: 'Labels' },
+  { key: 'include_sources', label: 'Sources' },
+  { key: 'include_communities', label: 'Communities' },
+  { key: 'include_skills', label: 'Skills' },
+  { key: 'include_edges', label: 'Graph edges' },
+  { key: 'include_working_memory', label: 'Working Memory' },
+  { key: 'include_working_memory_archive', label: 'Working Memory archive' },
+  { key: 'include_source_files', label: 'Original source files' }
 ];
 
 createRoot(document.getElementById('root')!).render(<Root />);

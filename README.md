@@ -128,8 +128,7 @@ The web UI provides pages for profile, sources, targets, schedules, tasks, run h
 ## GitHub Actions
 
 - `.github/workflows/ci.yml`: installs Node/Go dependencies, builds the embedded web UI, verifies generated ent code, runs Go tests, and builds all Go packages.
-- `.github/workflows/binary.yml`: builds standalone binaries for Linux, Windows, and macOS. Version tags create a draft GitHub release and upload binary archives.
+- `.github/workflows/binary.yml`: builds standalone binaries for Linux, Windows, and macOS when a `v*` tag is pushed or the workflow is run manually. Version tags create a draft GitHub release and upload binary archives.
 - `.github/workflows/docker.yml`: builds multi-arch Docker images for `linux/amd64` and `linux/arm64`.
-  - Push to `main`: builds and pushes `latest`, `main`, and `sha-<commit>` to Docker Hub and GHCR.
-  - Push tag `v*`: builds and pushes semantic version tags.
-  - Pull request: builds the image for verification but does not push.
+  - Push tag `v*`: builds and pushes semantic version tags to Docker Hub and GHCR.
+  - Manual run: builds and pushes images for the selected ref.

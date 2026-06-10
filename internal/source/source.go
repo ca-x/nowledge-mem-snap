@@ -70,16 +70,19 @@ func (e *Exporter) exportNowledgeMem(ctx context.Context, sourceCfg config.Sourc
 	if err := client.Data.Checkpoint(ctx); err != nil {
 		return Snapshot{}, fmt.Errorf("nowledge mem checkpoint: %w", err)
 	}
-	data, err := client.Data.DownloadExport(ctx, &mem.DataExportRequest{
-		Compress:           true,
-		Overwrite:          true,
-		IncludeMemories:    exportCfg.IncludeMemories,
-		IncludeThreads:     exportCfg.IncludeThreads,
-		IncludeMessages:    exportCfg.IncludeMessages,
-		IncludeEntities:    exportCfg.IncludeEntities,
-		IncludeLabels:      exportCfg.IncludeLabels,
-		IncludeSources:     exportCfg.IncludeSources,
-		IncludeCommunities: exportCfg.IncludeCommunities,
+	data, err := client.Data.DownloadExport(ctx, &mem.DataExportDownloadRequest{
+		IncludeMemories:             exportCfg.IncludeMemories,
+		IncludeThreads:              exportCfg.IncludeThreads,
+		IncludeMessages:             exportCfg.IncludeMessages,
+		IncludeEntities:             exportCfg.IncludeEntities,
+		IncludeLabels:               exportCfg.IncludeLabels,
+		IncludeSources:              exportCfg.IncludeSources,
+		IncludeCommunities:          exportCfg.IncludeCommunities,
+		IncludeSkills:               exportCfg.IncludeSkills,
+		IncludeEdges:                exportCfg.IncludeEdges,
+		IncludeWorkingMemory:        exportCfg.IncludeWorkingMemory,
+		IncludeWorkingMemoryArchive: exportCfg.IncludeWorkingMemoryArchive,
+		IncludeSourceFiles:          exportCfg.IncludeSourceFiles,
 	})
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("download nowledge mem export: %w", err)

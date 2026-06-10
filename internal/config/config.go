@@ -80,14 +80,18 @@ type NowledgeConfig struct {
 }
 
 type ExportConfig struct {
-	IncludeMemories      *bool `json:"include_memories,omitempty"`
-	IncludeThreads       *bool `json:"include_threads,omitempty"`
-	IncludeMessages      *bool `json:"include_messages,omitempty"`
-	IncludeEntities      *bool `json:"include_entities,omitempty"`
-	IncludeLabels        *bool `json:"include_labels,omitempty"`
-	IncludeSources       *bool `json:"include_sources,omitempty"`
-	IncludeCommunities   *bool `json:"include_communities,omitempty"`
-	IncludeWorkingMemory *bool `json:"include_working_memory,omitempty"`
+	IncludeMemories             *bool `json:"include_memories,omitempty"`
+	IncludeThreads              *bool `json:"include_threads,omitempty"`
+	IncludeMessages             *bool `json:"include_messages,omitempty"`
+	IncludeEntities             *bool `json:"include_entities,omitempty"`
+	IncludeLabels               *bool `json:"include_labels,omitempty"`
+	IncludeSources              *bool `json:"include_sources,omitempty"`
+	IncludeCommunities          *bool `json:"include_communities,omitempty"`
+	IncludeSkills               *bool `json:"include_skills,omitempty"`
+	IncludeEdges                *bool `json:"include_edges,omitempty"`
+	IncludeWorkingMemory        *bool `json:"include_working_memory,omitempty"`
+	IncludeWorkingMemoryArchive *bool `json:"include_working_memory_archive,omitempty"`
+	IncludeSourceFiles          *bool `json:"include_source_files,omitempty"`
 }
 
 type SourceConfig struct {
@@ -597,15 +601,7 @@ func Default() Config {
 				Scopes:          []string{"openid", "profile", "email"},
 			},
 		},
-		Export: ExportConfig{
-			IncludeMemories:    boolPtr(true),
-			IncludeThreads:     boolPtr(true),
-			IncludeMessages:    boolPtr(true),
-			IncludeEntities:    boolPtr(true),
-			IncludeLabels:      boolPtr(true),
-			IncludeSources:     boolPtr(true),
-			IncludeCommunities: boolPtr(true),
-		},
+		Export: defaultExportConfig(),
 		Sources: []SourceConfig{
 			{
 				Key:     "local-mem",
@@ -675,6 +671,7 @@ func Normalize(cfg Config) Config {
 	if cfg.HistoryRetentionDays <= 0 {
 		cfg.HistoryRetentionDays = 180
 	}
+	cfg.Export = mergeExportConfig(defaultExportConfig(), cfg.Export)
 	for i := range cfg.Sources {
 		cfg.Sources[i].Key = strings.TrimSpace(cfg.Sources[i].Key)
 		cfg.Sources[i].Name = defaultString(strings.TrimSpace(cfg.Sources[i].Name), cfg.Sources[i].Key)
@@ -1080,33 +1077,66 @@ func (c Config) Target(key string) (TargetConfig, bool) {
 	return TargetConfig{}, false
 }
 
-func (t TaskConfig) EffectiveExport(global ExportConfig) ExportConfig {
-	result := global
-	if t.Export.IncludeMemories != nil {
-		result.IncludeMemories = t.Export.IncludeMemories
+func defaultExportConfig() ExportConfig {
+	return ExportConfig{
+		IncludeMemories:             boolPtr(true),
+		IncludeThreads:              boolPtr(true),
+		IncludeMessages:             boolPtr(true),
+		IncludeEntities:             boolPtr(true),
+		IncludeLabels:               boolPtr(true),
+		IncludeSources:              boolPtr(true),
+		IncludeCommunities:          boolPtr(true),
+		IncludeSkills:               boolPtr(true),
+		IncludeEdges:                boolPtr(true),
+		IncludeWorkingMemory:        boolPtr(true),
+		IncludeWorkingMemoryArchive: boolPtr(false),
+		IncludeSourceFiles:          boolPtr(false),
 	}
-	if t.Export.IncludeThreads != nil {
-		result.IncludeThreads = t.Export.IncludeThreads
+}
+
+func mergeExportConfig(base ExportConfig, override ExportConfig) ExportConfig {
+	result := base
+	if override.IncludeMemories != nil {
+		result.IncludeMemories = override.IncludeMemories
 	}
-	if t.Export.IncludeMessages != nil {
-		result.IncludeMessages = t.Export.IncludeMessages
+	if override.IncludeThreads != nil {
+		result.IncludeThreads = override.IncludeThreads
 	}
-	if t.Export.IncludeEntities != nil {
-		result.IncludeEntities = t.Export.IncludeEntities
+	if override.IncludeMessages != nil {
+		result.IncludeMessages = override.IncludeMessages
 	}
-	if t.Export.IncludeLabels != nil {
-		result.IncludeLabels = t.Export.IncludeLabels
+	if override.IncludeEntities != nil {
+		result.IncludeEntities = override.IncludeEntities
 	}
-	if t.Export.IncludeSources != nil {
-		result.IncludeSources = t.Export.IncludeSources
+	if override.IncludeLabels != nil {
+		result.IncludeLabels = override.IncludeLabels
 	}
-	if t.Export.IncludeCommunities != nil {
-		result.IncludeCommunities = t.Export.IncludeCommunities
+	if override.IncludeSources != nil {
+		result.IncludeSources = override.IncludeSources
 	}
-	if t.Export.IncludeWorkingMemory != nil {
-		result.IncludeWorkingMemory = t.Export.IncludeWorkingMemory
+	if override.IncludeCommunities != nil {
+		result.IncludeCommunities = override.IncludeCommunities
+	}
+	if override.IncludeSkills != nil {
+		result.IncludeSkills = override.IncludeSkills
+	}
+	if override.IncludeEdges != nil {
+		result.IncludeEdges = override.IncludeEdges
+	}
+	if override.IncludeWorkingMemory != nil {
+		result.IncludeWorkingMemory = override.IncludeWorkingMemory
+	}
+	if override.IncludeWorkingMemoryArchive != nil {
+		result.IncludeWorkingMemoryArchive = override.IncludeWorkingMemoryArchive
+	}
+	if override.IncludeSourceFiles != nil {
+		result.IncludeSourceFiles = override.IncludeSourceFiles
 	}
 	return result
+}
+
+func (t TaskConfig) EffectiveExport(global ExportConfig) ExportConfig {
+	return mergeExportConfig(global, t.Export)
 }
 
 func ParseClock(raw string) (hour int, minute int, err error) {
