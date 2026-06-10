@@ -587,7 +587,7 @@ function AppFooter({ versionInfo }: { versionInfo: VersionInfo | null }) {
 
   return (
     <footer className="app-footer" aria-label={t('versionInfo')}>
-      <span>Nowledge Mem Snap</span>
+      <span>nowledge-mem snap</span>
       <Tooltip
         placement="top"
         title={(

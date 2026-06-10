@@ -41,13 +41,13 @@ docker compose up -d
 GitHub Actions 会自动构建并推送镜像到 Docker Hub 和 GitHub Container Registry：
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.3
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.3
+docker pull czyt/nowledge-mem-snap:v0.1.4
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.4
 ```
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.3`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.4`。
 - `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 
