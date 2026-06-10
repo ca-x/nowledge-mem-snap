@@ -57,7 +57,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.6`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.7`。
 - `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 
@@ -152,7 +152,7 @@ go run .
 go run . backup <tenant> <task>
 ```
 
-默认数据库是 `DATA_DIR/data.db`，SQLite DSN 默认启用 WAL、外键、normal synchronous 和 10 秒 busy timeout。可以通过 `NMEM_SNAP_DATABASE_TYPE` 加 `NMEM_SNAP_DATABASE_DSN` 切换到 PostgreSQL 或 MySQL；随附的 Compose 文件里提供了可选的 `postgres` 和 `mysql` profiles。
+默认数据库是 `DATA_DIR/data.db`，SQLite DSN 默认启用 WAL、外键、normal synchronous 和 10 秒 busy timeout。可以通过 `NMEM_SNAP_DATABASE_TYPE` 加 `NMEM_SNAP_DATABASE_DSN` 切换到 PostgreSQL 或 MySQL；随附的 Compose 文件只把 PostgreSQL 和 MySQL 作为注释示例保留，所以 `docker compose up -d` 默认使用 SQLite。
 
 Web UI 按使用流程提供 source、target、schedule、导出选项、备份清理策略、task、运行历史和设置页面。用户不需要编辑原始 JSON 配置，也不需要输入内部记录标识。
 

@@ -57,7 +57,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.6`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.7`.
 - `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 
@@ -152,7 +152,7 @@ CLI one-shot backup:
 go run . backup <tenant> <task>
 ```
 
-The default database is `DATA_DIR/data.db` with SQLite WAL, foreign keys, normal synchronous mode, and a 10s busy timeout. Use `NMEM_SNAP_DATABASE_TYPE` plus `NMEM_SNAP_DATABASE_DSN` to switch to PostgreSQL or MySQL. The bundled Compose file includes optional `postgres` and `mysql` profiles.
+The default database is `DATA_DIR/data.db` with SQLite WAL, foreign keys, normal synchronous mode, and a 10s busy timeout. Use `NMEM_SNAP_DATABASE_TYPE` plus `NMEM_SNAP_DATABASE_DSN` to switch to PostgreSQL or MySQL. The bundled Compose file keeps PostgreSQL and MySQL as commented examples so `docker compose up -d` starts with SQLite by default.
 
 The web UI follows the setup flow: sources, targets, schedules, export options, backup strategies, tasks, run history, and settings. Users do not edit raw JSON configuration or internal record identifiers.
 

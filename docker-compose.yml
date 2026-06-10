@@ -19,44 +19,61 @@ services:
       start_period: 5s
       retries: 3
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: nowledge-mem-snap-postgres
-    profiles:
-      - postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: nowledge_mem_snap
-      POSTGRES_USER: nowledge_mem_snap
-      POSTGRES_PASSWORD: nowledge_mem_snap_password
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nowledge_mem_snap -d nowledge_mem_snap"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - snap-postgres:/var/lib/postgresql/data
-
-  mysql:
-    image: mysql:8.4
-    container_name: nowledge-mem-snap-mysql
-    profiles:
-      - mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: nowledge_mem_snap
-      MYSQL_USER: nowledge_mem_snap
-      MYSQL_PASSWORD: nowledge_mem_snap_password
-      MYSQL_ROOT_PASSWORD: nowledge_mem_snap_root_password
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-unowledge_mem_snap", "-pnowledge_mem_snap_password"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    volumes:
-      - snap-mysql:/var/lib/mysql
+  # Default database:
+  # - The app uses SQLite by default.
+  # - Keep `NMEM_SNAP_DATABASE_TYPE=sqlite` and `NMEM_SNAP_DATABASE_DSN=` in example.env.
+  # - SQLite data is stored under the `snap-data` volume at /app/data/data.db.
+  #
+  # Optional PostgreSQL example:
+  # 1. Uncomment this service and the `snap-postgres` volume below.
+  # 2. In example.env, set:
+  #    NMEM_SNAP_DATABASE_TYPE=postgres
+  #    NMEM_SNAP_DATABASE_DSN=postgres://nowledge_mem_snap:nowledge_mem_snap_password@postgres:5432/nowledge_mem_snap?sslmode=disable
+  # 3. Run `docker compose up -d`.
+  #
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: nowledge-mem-snap-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: nowledge_mem_snap
+  #     POSTGRES_USER: nowledge_mem_snap
+  #     POSTGRES_PASSWORD: nowledge_mem_snap_password
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U nowledge_mem_snap -d nowledge_mem_snap"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   volumes:
+  #     - snap-postgres:/var/lib/postgresql/data
+  #
+  # Optional MySQL/MariaDB example:
+  # 1. Uncomment this service and the `snap-mysql` volume below.
+  # 2. In example.env, set:
+  #    NMEM_SNAP_DATABASE_TYPE=mysql
+  #    NMEM_SNAP_DATABASE_DSN=nowledge_mem_snap:nowledge_mem_snap_password@tcp(mysql:3306)/nowledge_mem_snap?parseTime=true&charset=utf8mb4&loc=Local
+  # 3. Run `docker compose up -d`.
+  #
+  # mysql:
+  #   image: mysql:8.4
+  #   container_name: nowledge-mem-snap-mysql
+  #   restart: unless-stopped
+  #   environment:
+  #     MYSQL_DATABASE: nowledge_mem_snap
+  #     MYSQL_USER: nowledge_mem_snap
+  #     MYSQL_PASSWORD: nowledge_mem_snap_password
+  #     MYSQL_ROOT_PASSWORD: nowledge_mem_snap_root_password
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-unowledge_mem_snap", "-pnowledge_mem_snap_password"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   volumes:
+  #     - snap-mysql:/var/lib/mysql
 
 volumes:
   snap-data:
-  snap-postgres:
-  snap-mysql:
+  # Uncomment with the optional PostgreSQL service.
+  # snap-postgres:
+  # Uncomment with the optional MySQL service.
+  # snap-mysql:
