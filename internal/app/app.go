@@ -42,7 +42,7 @@ func Run(web embed.FS, args []string) int {
 			return 0
 		case "backup":
 			tenant := ""
-			task := "default"
+			task := config.DefaultTaskKey
 			if len(args) > 2 {
 				tenant = args[2]
 			}

@@ -8,7 +8,7 @@ It backs up each logged-in user's private configuration to S3-compatible storage
 
 ## Features
 
-- Multi-user isolation: sources, targets, tasks, and run history are per user.
+- Multi-user isolation: sources, targets, schedules, export options, backup strategies, tasks, and run history are per user.
 - Configuration is stored in the database. Users manage it from the web UI; no local JSON config file is required.
 - First-run setup wizard, or admin bootstrap by environment variable.
 - Password login and optional OIDC login.
@@ -20,9 +20,11 @@ It backs up each logged-in user's private configuration to S3-compatible storage
 - Targets:
   - S3/R2-compatible storage via `github.com/fclairamb/afero-s3`.
   - WebDAV via `github.com/lib-x/aferodav` and an HTTP WebDAV adapter.
-- Daily, weekly, and one-time scheduled tasks. Schedule times use the process `TZ`.
+- Reusable export options for Nowledge Mem portable archives.
+- Reusable backup cleanup policies: no cleanup, keep latest N, keep recent N days, keep after date, or keep before date.
+- Daily, weekly, and one-time schedules. Schedule times use the process `TZ`.
 - Optional AES-GCM encrypted backup packages per task.
-- Per-task remote backup cleanup: disabled, keep latest N, keep recent N days, keep after date, or keep before date.
+- Tasks compose a source, target set, schedule, export option, and backup cleanup policy.
 - Run history cleanup by count and age.
 - Structured `slog` logs to stdout and a rotating file via lumberjack.
 - Embedded React UI built with `animal-island-ui`.
@@ -39,13 +41,14 @@ Open `http://localhost:14335`. If no admin env vars are set, the setup wizard cr
 Published images are built by GitHub Actions and pushed to Docker Hub and GitHub Container Registry:
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.0
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.0
+docker pull czyt/nowledge-mem-snap:v0.1.1
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.1
 ```
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.0`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.1`.
+- `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 
 Useful environment variables:
@@ -102,6 +105,8 @@ Target layout has two levels:
 - Target `root_prefix`: the remote root directory/prefix inside the bucket or WebDAV account.
 - Task `object_prefix`: the task-specific path template under that root, for example `nowledge-mem/{task}/{timestamp}`.
 
+Path template tokens: `{task}` / `{task_name}` use the task display name, `{task_id}` uses the internal UUID, `{date}` uses UTC `YYYY-MM-DD`, and `{timestamp}` uses UTC `YYYYMMDDTHHMMSSZ`.
+
 Automatic remote cleanup only scans the stable directory derived from the task `object_prefix` under the target `root_prefix`, and only removes backup objects ending in `.zip` or `.zip.aes.json`.
 
 Time semantics:
@@ -131,12 +136,11 @@ go run . backup <tenant> <task>
 
 The default database is `DATA_DIR/data.db`. You can override the DSN with `NMEM_SNAP_DATABASE_URL` or `DATABASE_URL`.
 
-The web UI provides pages for profile, sources, targets, schedules, tasks, run history, and retention settings. Users do not edit raw JSON configuration.
+The web UI follows the setup flow: sources, targets, schedules, export options, backup strategies, tasks, run history, and settings. Users do not edit raw JSON configuration or internal record identifiers.
 
 ## GitHub Actions
 
 - `.github/workflows/ci.yml`: installs Node/Go dependencies, builds the embedded web UI, verifies generated ent code, runs Go tests, and builds all Go packages.
-- `.github/workflows/binary.yml`: builds standalone binaries for Linux, Windows, and macOS when a `v*` tag is pushed or the workflow is run manually. Version tags create a draft GitHub release and upload binary archives.
+- `.github/workflows/binary.yml`: builds standalone binaries for Linux, Windows, and macOS when a `v*` tag is pushed. Version tags create a draft GitHub release and upload binary archives.
 - `.github/workflows/docker.yml`: builds multi-arch Docker images for `linux/amd64` and `linux/arm64`.
   - Push tag `v*`: builds and pushes semantic version tags to Docker Hub and GHCR.
-  - Manual run: builds and pushes images for the selected ref.

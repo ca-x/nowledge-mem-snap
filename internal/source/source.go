@@ -39,7 +39,11 @@ func (e *Exporter) Export(ctx context.Context, cfg config.Config, task config.Ta
 	}
 	switch sourceCfg.Type {
 	case "nowledgemem_api":
-		return e.exportNowledgeMem(ctx, sourceCfg, task.EffectiveExport(cfg.Export))
+		exportOption, ok := cfg.ExportOption(task.ExportOptionKey)
+		if !ok {
+			return Snapshot{}, fmt.Errorf("export option %q was not found", task.ExportOptionKey)
+		}
+		return e.exportNowledgeMem(ctx, sourceCfg, exportOption.Export)
 	case "directory":
 		if err := config.ValidateDirectorySource(sourceCfg.Directory); err != nil {
 			return Snapshot{}, err
@@ -71,7 +75,18 @@ func (e *Exporter) exportNowledgeMem(ctx context.Context, sourceCfg config.Sourc
 	if err := client.Data.Checkpoint(ctx); err != nil {
 		return Snapshot{}, fmt.Errorf("nowledge mem checkpoint: %w", err)
 	}
-	data, err := client.Data.DownloadExport(ctx, &mem.DataExportDownloadRequest{
+	data, err := client.Data.DownloadExport(ctx, exportDownloadRequest(exportCfg))
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("download nowledge mem export: %w", err)
+	}
+	return Snapshot{
+		Data:      data,
+		SizeBytes: int64(len(data)),
+	}, nil
+}
+
+func exportDownloadRequest(exportCfg config.ExportConfig) *mem.DataExportDownloadRequest {
+	return &mem.DataExportDownloadRequest{
 		IncludeMemories:             exportCfg.IncludeMemories,
 		IncludeThreads:              exportCfg.IncludeThreads,
 		IncludeMessages:             exportCfg.IncludeMessages,
@@ -84,14 +99,7 @@ func (e *Exporter) exportNowledgeMem(ctx context.Context, sourceCfg config.Sourc
 		IncludeWorkingMemory:        exportCfg.IncludeWorkingMemory,
 		IncludeWorkingMemoryArchive: exportCfg.IncludeWorkingMemoryArchive,
 		IncludeSourceFiles:          exportCfg.IncludeSourceFiles,
-	})
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("download nowledge mem export: %w", err)
 	}
-	return Snapshot{
-		Data:      data,
-		SizeBytes: int64(len(data)),
-	}, nil
 }
 
 func (e *Exporter) exportDirectory(root string) (Snapshot, error) {

@@ -8,7 +8,7 @@ Nowledge Mem Snap 是一个自托管的 Nowledge Mem 备份服务。
 
 ## 功能
 
-- 多用户隔离：source、target、task、运行历史按用户/租户隔离。
+- 多用户隔离：source、target、schedule、导出选项、备份清理策略、task、运行历史按用户/租户隔离。
 - 配置全部存数据库，用户通过 Web UI 表单管理，不需要编辑本地 JSON 配置文件。
 - 首次启动设置向导；也支持通过环境变量初始化管理员。
 - 密码登录和可选 OIDC 登录。
@@ -20,9 +20,11 @@ Nowledge Mem Snap 是一个自托管的 Nowledge Mem 备份服务。
 - Target：
   - S3/R2 兼容存储，基于 `github.com/fclairamb/afero-s3`。
   - WebDAV，基于 `github.com/lib-x/aferodav` 和本项目的 HTTP WebDAV 适配。
-- 定时任务：支持每天、每周、单次执行；执行时间按进程 `TZ` 解释。
+- 可复用的 Nowledge Mem 导出选项，用来选择可移植压缩包包含哪些数据。
+- 可复用的备份清理策略：不清理、保留最近 N 份、保留最近 N 天、保留某日期之后、保留某日期之前。
+- 计划：支持每天、每周、单次执行；执行时间按进程 `TZ` 解释。
 - 每个任务可选 AES-GCM 加密备份包。
-- 每个任务可配置远端备份清理策略：不清理、保留最近 N 份、保留最近 N 天、保留某日期之后、保留某日期之前。
+- 任务只负责组合来源、目标、计划、导出选项和备份清理策略。
 - 运行历史按条数和天数自动清理，避免数据库无限膨胀。
 - 使用 `slog` 输出结构化日志，并通过 lumberjack 写文件和自动轮转。
 - 嵌入式 React UI，使用 `animal-island-ui`。
@@ -39,13 +41,14 @@ docker compose up -d
 GitHub Actions 会自动构建并推送镜像到 Docker Hub 和 GitHub Container Registry：
 
 ```bash
-docker pull czyt/nowledge-mem-snap:v0.1.0
-docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.0
+docker pull czyt/nowledge-mem-snap:v0.1.1
+docker pull ghcr.io/ca-x/nowledge-mem-snap:v0.1.1
 ```
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.0`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.1`。
+- `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 
 常用环境变量：
@@ -102,6 +105,8 @@ environment:
 - Target `root_prefix`：bucket 或 WebDAV 账号下的远端根目录/前缀。
 - Task `object_prefix`：该任务自己的对象路径模板，例如 `nowledge-mem/{task}/{timestamp}`。
 
+路径模板变量：`{task}` / `{task_name}` 使用任务显示名称，`{task_id}` 使用内部 UUID，`{date}` 使用 UTC `YYYY-MM-DD`，`{timestamp}` 使用 UTC `YYYYMMDDTHHMMSSZ`。
+
 自动清理远端备份时，只会扫描 `target.root_prefix + task.object_prefix` 推导出的稳定任务目录，并且只删除 `.zip` 或 `.zip.aes.json` 备份对象，不会扫描整个 bucket 或 WebDAV 根目录。
 
 时间语义：
@@ -131,12 +136,11 @@ go run . backup <tenant> <task>
 
 默认数据库是 `DATA_DIR/data.db`。可以通过 `NMEM_SNAP_DATABASE_URL` 或 `DATABASE_URL` 覆盖 DSN。
 
-Web UI 提供用户资料、source、target、schedule、task、运行历史和保留策略设置页面。用户不需要编辑原始 JSON 配置。
+Web UI 按使用流程提供 source、target、schedule、导出选项、备份清理策略、task、运行历史和设置页面。用户不需要编辑原始 JSON 配置，也不需要输入内部记录标识。
 
 ## GitHub Actions
 
 - `.github/workflows/ci.yml`：安装 Node/Go 依赖，构建嵌入式前端，校验 ent 生成代码，运行 Go 测试，并构建 Go 包。
-- `.github/workflows/binary.yml`：推送 `v*` tag 或手动运行 workflow 时构建 Linux、Windows、macOS 独立二进制；推送版本 tag 时会创建 draft GitHub Release 并上传二进制压缩包。
+- `.github/workflows/binary.yml`：推送 `v*` tag 时构建 Linux、Windows、macOS 独立二进制；推送版本 tag 时会创建 draft GitHub Release 并上传二进制压缩包。
 - `.github/workflows/docker.yml`：构建 `linux/amd64` 和 `linux/arm64` 多架构 Docker 镜像。
   - 推送 `v*` tag：自动构建并推送语义化版本镜像到 Docker Hub 和 GHCR。
-  - 手动运行：为选择的 ref 构建并推送镜像。

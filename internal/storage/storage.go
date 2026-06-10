@@ -98,7 +98,7 @@ func ApplyRetention(ctx context.Context, target Target, task config.TaskConfig, 
 	if retention.Mode == "" || retention.Mode == "none" {
 		return 0, nil
 	}
-	scope := archive.RetentionDirectory(task.ObjectPrefix, task.Key)
+	scope := archive.RetentionDirectory(task.ObjectPrefix, task.Key, task.Name)
 	if scope == "" || scope == "." || scope == "/" {
 		return 0, fmt.Errorf("retention requires object_prefix to contain a stable directory before date or timestamp tokens")
 	}

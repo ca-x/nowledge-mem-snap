@@ -48,6 +48,11 @@ func (r *Runner) RunScheduledTask(ctx context.Context, task config.TaskConfig) (
 }
 
 func (r *Runner) run(ctx context.Context, task config.TaskConfig, trigger string) (history.Run, error) {
+	resolvedTask, err := r.cfg.ResolveTask(task)
+	if err != nil {
+		return history.Run{}, err
+	}
+	task = resolvedTask
 	start := time.Now().UTC()
 	run := history.Run{
 		ID:        newRunID(),
@@ -84,7 +89,10 @@ func (r *Runner) run(ctx context.Context, task config.TaskConfig, trigger string
 
 	password := ""
 	if task.Encryption.Enabled {
-		password = getenv(task.Encryption.PasswordEnv)
+		password = task.Encryption.Password
+		if password == "" {
+			password = getenv(task.Encryption.PasswordEnv)
+		}
 	}
 	runLogger.Info("backup packaging started", "encrypted", task.Encryption.Enabled)
 	artifact, err := archive.Build(snap.Data, archive.BuildOptions{

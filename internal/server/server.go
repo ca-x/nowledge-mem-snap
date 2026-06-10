@@ -4,9 +4,11 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/lib-x/nowledge-mem-snap/internal/config"
 	"github.com/lib-x/nowledge-mem-snap/internal/history"
 	"github.com/lib-x/nowledge-mem-snap/internal/source"
+	"github.com/lib-x/nowledge-mem-snap/version"
 )
 
 type Server struct {
@@ -60,12 +63,17 @@ func (s *Server) Handler() http.Handler {
 	api.HandleFunc("/api/profile", s.handleProfile)
 	api.HandleFunc("/api/config", s.handleConfig)
 	api.HandleFunc("/api/source-roots", s.handleSourceRoots)
+	api.HandleFunc("/api/version", s.handleVersion)
 	api.HandleFunc("/api/sources/test", s.handleTestSource)
+	api.HandleFunc("/api/sources/test/download", s.handleDownloadTestSource)
 	api.HandleFunc("/api/runs", s.handleRuns)
 	api.HandleFunc("/api/backup/run", s.handleRunBackup)
 	mux.Handle("/api/", s.auth.Require(api))
 
 	static := s.staticHandler()
+	mux.Handle("/assets/", static)
+	mux.Handle("/logo.png", static)
+	mux.Handle("/favicon.ico", static)
 	mux.Handle("/login", static)
 	mux.Handle("/", s.auth.Require(static))
 	return secureHeaders(mux)
@@ -159,9 +167,27 @@ func (s *Server) handleSourceRoots(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"roots": config.AllowedDirectoryRoots()})
 }
 
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version":    version.Version,
+		"build_time": version.BuildTime,
+		"git_commit": version.GitCommit,
+		"full":       version.Full(),
+	})
+}
+
 func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
 	var req config.SourceConfig
@@ -169,10 +195,59 @@ func (s *Server) handleTestSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	if cfg, err := s.store.LoadUser(claims.Tenant); err == nil {
+		if existing, ok := cfg.Source(req.Key); ok {
+			req = config.MergeSourceSecrets(req, existing)
+		}
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	result := source.Test(ctx, req)
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleDownloadTestSource(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	var req struct {
+		Source config.SourceConfig `json:"source"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	sourceCfg := req.Source
+	if cfg, err := s.store.LoadUser(claims.Tenant); err == nil {
+		if existing, ok := cfg.Source(sourceCfg.Key); ok {
+			sourceCfg = config.MergeSourceSecrets(sourceCfg, existing)
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	s.logger.Info("source test download started", "tenant", claims.Tenant, "source", sourceCfg.Key, "type", sourceCfg.Type)
+	data, result := source.DownloadTest(ctx, sourceCfg, config.DefaultExportConfig())
+	if !result.OK {
+		s.logger.Warn("source test download failed", "tenant", claims.Tenant, "source", sourceCfg.Key, "type", sourceCfg.Type, "code", result.Code, "message", result.Message)
+		writeJSON(w, http.StatusBadRequest, result)
+		return
+	}
+	filename := fmt.Sprintf("source-test-%s.zip", time.Now().UTC().Format("20060102T150405Z"))
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(data); err != nil {
+		s.logger.Warn("source test download write failed", "tenant", claims.Tenant, "source", sourceCfg.Key, "error", err)
+		return
+	}
+	s.logger.Info("source test download finished", "tenant", claims.Tenant, "source", sourceCfg.Key, "type", sourceCfg.Type, "bytes", len(data))
 }
 
 func (s *Server) handleRuns(w http.ResponseWriter, r *http.Request) {

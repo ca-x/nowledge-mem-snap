@@ -65,7 +65,7 @@ func Build(zipData []byte, opts BuildOptions) (Artifact, error) {
 	if opts.CreatedAt.IsZero() {
 		opts.CreatedAt = time.Now().UTC()
 	}
-	name := ObjectName(opts.Prefix, opts.TaskKey, opts.CreatedAt, PlainExtension)
+	name := ObjectName(opts.Prefix, opts.TaskKey, opts.TaskName, opts.CreatedAt, PlainExtension)
 	artifact := Artifact{
 		Name:        name,
 		ContentType: "application/zip",
@@ -90,7 +90,7 @@ func Build(zipData []byte, opts BuildOptions) (Artifact, error) {
 	if err != nil {
 		return Artifact{}, err
 	}
-	artifact.Name = ObjectName(opts.Prefix, opts.TaskKey, opts.CreatedAt, EncryptedExtension)
+	artifact.Name = ObjectName(opts.Prefix, opts.TaskKey, opts.TaskName, opts.CreatedAt, EncryptedExtension)
 	artifact.ContentType = "application/json"
 	artifact.Data = encrypted
 	artifact.Encrypted = true
@@ -144,7 +144,7 @@ func Encrypt(plain []byte, password string, metadata Metadata) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func ObjectName(prefix, taskKey string, at time.Time, extension string) string {
+func ObjectName(prefix, taskKey, taskName string, at time.Time, extension string) string {
 	if at.IsZero() {
 		at = time.Now().UTC()
 	}
@@ -154,14 +154,17 @@ func ObjectName(prefix, taskKey string, at time.Time, extension string) string {
 	if prefix == "" {
 		prefix = "nowledge-mem/{task}/{timestamp}"
 	}
+	taskSegment := taskPathSegment(taskKey, taskName)
 	replacer := strings.NewReplacer(
-		"{task}", cleanSegment(taskKey),
+		"{task}", taskSegment,
+		"{task_name}", taskSegment,
+		"{task_id}", cleanSegment(taskKey),
 		"{timestamp}", timestamp,
 		"{date}", date,
 	)
 	name := replacer.Replace(prefix)
 	if strings.HasSuffix(name, "/") {
-		name += "nowledge-mem-" + cleanSegment(taskKey) + "-" + timestamp
+		name += "nowledge-mem-" + taskSegment + "-" + timestamp
 	}
 	if !strings.HasSuffix(name, PlainExtension) && !strings.HasSuffix(name, EncryptedExtension) {
 		name += extension
@@ -173,12 +176,15 @@ func ObjectName(prefix, taskKey string, at time.Time, extension string) string {
 	return name
 }
 
-func RetentionDirectory(prefix, taskKey string) string {
+func RetentionDirectory(prefix, taskKey, taskName string) string {
 	prefix = strings.TrimSpace(prefix)
 	if prefix == "" {
 		prefix = "nowledge-mem/{task}/{timestamp}"
 	}
-	prefix = strings.ReplaceAll(prefix, "{task}", cleanSegment(taskKey))
+	taskSegment := taskPathSegment(taskKey, taskName)
+	prefix = strings.ReplaceAll(prefix, "{task}", taskSegment)
+	prefix = strings.ReplaceAll(prefix, "{task_name}", taskSegment)
+	prefix = strings.ReplaceAll(prefix, "{task_id}", cleanSegment(taskKey))
 	firstDynamic := -1
 	for _, token := range []string{"{timestamp}", "{date}"} {
 		if idx := strings.Index(prefix, token); idx >= 0 && (firstDynamic == -1 || idx < firstDynamic) {
@@ -204,6 +210,13 @@ func retentionScope(raw string) string {
 		return "."
 	}
 	return scope
+}
+
+func taskPathSegment(taskKey, taskName string) string {
+	if strings.TrimSpace(taskName) != "" {
+		return cleanSegment(taskName)
+	}
+	return cleanSegment(taskKey)
 }
 
 func aad(metadata Metadata) []byte {

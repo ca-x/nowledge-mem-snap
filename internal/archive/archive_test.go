@@ -9,8 +9,8 @@ import (
 
 func TestObjectNameExpandsTokens(t *testing.T) {
 	at := time.Date(2026, 6, 10, 12, 30, 45, 0, time.UTC)
-	got := ObjectName("backups/{task}/{date}/{timestamp}", "main", at, PlainExtension)
-	want := "backups/main/2026-06-10/20260610T123045Z.zip"
+	got := ObjectName("backups/{task}/{task_id}/{date}/{timestamp}", "018ff3c8-a1ec-74f8-9381-fc7d6fb17f51", "Main Mem", at, PlainExtension)
+	want := "backups/Main-Mem/018ff3c8-a1ec-74f8-9381-fc7d6fb17f51/2026-06-10/20260610T123045Z.zip"
 	if got != want {
 		t.Fatalf("ObjectName() = %q, want %q", got, want)
 	}
@@ -20,6 +20,7 @@ func TestBuildEncryptionOptional(t *testing.T) {
 	plain, err := Build([]byte("zip"), BuildOptions{
 		Prefix:    "snap/{task}/{timestamp}",
 		TaskKey:   "default",
+		TaskName:  "Default backup",
 		CreatedAt: time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
@@ -35,6 +36,7 @@ func TestBuildEncryptionOptional(t *testing.T) {
 	encrypted, err := Build([]byte("zip"), BuildOptions{
 		Prefix:             "snap/{task}/{timestamp}",
 		TaskKey:            "default",
+		TaskName:           "Default backup",
 		CreatedAt:          time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC),
 		Encrypt:            true,
 		EncryptionPassword: "secret",
@@ -55,13 +57,13 @@ func TestBuildEncryptionOptional(t *testing.T) {
 }
 
 func TestRetentionDirectoryUsesStableTaskPrefix(t *testing.T) {
-	got := RetentionDirectory("nowledge-mem/{task}/{timestamp}", "default")
-	want := "nowledge-mem/default"
+	got := RetentionDirectory("nowledge-mem/{task}/{timestamp}", "018ff3c8-a1ec-74f8-9381-fc7d6fb17f51", "Default backup")
+	want := "nowledge-mem/Default-backup"
 	if got != want {
 		t.Fatalf("RetentionDirectory() = %q, want %q", got, want)
 	}
 
-	root := RetentionDirectory("{timestamp}", "default")
+	root := RetentionDirectory("{timestamp}", "default", "Default backup")
 	if root != "." {
 		t.Fatalf("RetentionDirectory root template = %q, want .", root)
 	}

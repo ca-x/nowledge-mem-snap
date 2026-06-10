@@ -22,30 +22,40 @@ import (
 
 const (
 	DefaultPort = 14335
+
+	DefaultSourceKey         = "7f9f4bc7-6245-4d20-9f45-2e1837e7a901"
+	DefaultDailyScheduleKey  = "3dd785a4-3bfc-4be1-a412-60176b879f77"
+	DefaultWeeklyScheduleKey = "6df2e7f1-8f64-4072-9823-0c249a422a81"
+	DefaultExportOptionKey   = "9caaf0b1-a0f1-4ab7-8a28-2f5c0e2c45f9"
+	DefaultBackupStrategyKey = "2b41d8a7-87c2-4b8a-913a-6b6a41b611b7"
+	DefaultTaskKey           = "018ff3c8-a1ec-74f8-9381-fc7d6fb17f51"
 )
 
 var keyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 type Config struct {
-	Listen               ListenConfig     `json:"listen"`
-	Auth                 AuthConfig       `json:"auth"`
-	Export               ExportConfig     `json:"export"`
-	Sources              []SourceConfig   `json:"sources"`
-	Schedules            []ScheduleConfig `json:"schedules"`
-	Targets              []TargetConfig   `json:"targets"`
-	Tasks                []TaskConfig     `json:"tasks"`
-	HistoryLimit         int              `json:"history_limit"`
-	HistoryRetentionDays int              `json:"history_retention_days"`
+	Listen               ListenConfig           `json:"listen"`
+	Auth                 AuthConfig             `json:"auth"`
+	Runtime              RuntimeConfig          `json:"runtime,omitempty"`
+	Sources              []SourceConfig         `json:"sources"`
+	Schedules            []ScheduleConfig       `json:"schedules"`
+	Targets              []TargetConfig         `json:"targets"`
+	ExportOptions        []ExportOptionConfig   `json:"export_options"`
+	BackupStrategies     []BackupStrategyConfig `json:"backup_strategies"`
+	Tasks                []TaskConfig           `json:"tasks"`
+	HistoryLimit         int                    `json:"history_limit"`
+	HistoryRetentionDays int                    `json:"history_retention_days"`
 }
 
 type UserConfig struct {
-	Export               ExportConfig     `json:"export"`
-	Sources              []SourceConfig   `json:"sources"`
-	Schedules            []ScheduleConfig `json:"schedules"`
-	Targets              []TargetConfig   `json:"targets"`
-	Tasks                []TaskConfig     `json:"tasks"`
-	HistoryLimit         int              `json:"history_limit"`
-	HistoryRetentionDays int              `json:"history_retention_days"`
+	Sources              []SourceConfig         `json:"sources"`
+	Schedules            []ScheduleConfig       `json:"schedules"`
+	Targets              []TargetConfig         `json:"targets"`
+	ExportOptions        []ExportOptionConfig   `json:"export_options"`
+	BackupStrategies     []BackupStrategyConfig `json:"backup_strategies"`
+	Tasks                []TaskConfig           `json:"tasks"`
+	HistoryLimit         int                    `json:"history_limit"`
+	HistoryRetentionDays int                    `json:"history_retention_days"`
 }
 
 type ListenConfig struct {
@@ -58,6 +68,11 @@ type AuthConfig struct {
 	PasswordEnv      string     `json:"password_env"`
 	SessionSecretEnv string     `json:"session_secret_env"`
 	OIDC             OIDCConfig `json:"oidc"`
+}
+
+type RuntimeConfig struct {
+	Timezone      string `json:"timezone,omitempty"`
+	TimezoneLabel string `json:"timezone_label,omitempty"`
 }
 
 type OIDCConfig struct {
@@ -74,8 +89,8 @@ type OIDCConfig struct {
 
 type NowledgeConfig struct {
 	APIURL    string        `json:"api_url"`
-	APIKeyEnv string        `json:"api_key_env"`
-	APIKey    string        `json:"-"`
+	APIKey    string        `json:"api_key,omitempty"`
+	APIKeyEnv string        `json:"api_key_env,omitempty"`
 	Timeout   time.Duration `json:"-"`
 }
 
@@ -92,6 +107,18 @@ type ExportConfig struct {
 	IncludeWorkingMemory        *bool `json:"include_working_memory,omitempty"`
 	IncludeWorkingMemoryArchive *bool `json:"include_working_memory_archive,omitempty"`
 	IncludeSourceFiles          *bool `json:"include_source_files,omitempty"`
+}
+
+type ExportOptionConfig struct {
+	Key    string       `json:"key"`
+	Name   string       `json:"name"`
+	Export ExportConfig `json:"export"`
+}
+
+type BackupStrategyConfig struct {
+	Key       string          `json:"key"`
+	Name      string          `json:"name"`
+	Retention RetentionConfig `json:"retention"`
 }
 
 type SourceConfig struct {
@@ -141,34 +168,36 @@ type S3Config struct {
 	BucketName         string `json:"bucket_name"`
 	RootPrefix         string `json:"root_prefix"`
 	AccessKeyID        string `json:"access_key_id"`
-	SecretAccessKey    string `json:"-"`
-	SecretAccessKeyEnv string `json:"secret_access_key_env"`
+	SecretAccessKey    string `json:"secret_access_key,omitempty"`
+	SecretAccessKeyEnv string `json:"secret_access_key_env,omitempty"`
 }
 
 type WebDAVConfig struct {
 	URL         string `json:"url"`
 	RootPrefix  string `json:"root_prefix"`
 	Username    string `json:"username"`
-	Password    string `json:"-"`
-	PasswordEnv string `json:"password_env"`
+	Password    string `json:"password,omitempty"`
+	PasswordEnv string `json:"password_env,omitempty"`
 }
 
 type TaskConfig struct {
-	Key          string           `json:"key"`
-	Name         string           `json:"name"`
-	Enabled      bool             `json:"enabled"`
-	SourceKey    string           `json:"source_key"`
-	ScheduleKey  string           `json:"schedule_key"`
-	TargetKeys   []string         `json:"target_keys"`
-	ObjectPrefix string           `json:"object_prefix"`
-	Encryption   EncryptionConfig `json:"encryption"`
-	Retention    RetentionConfig  `json:"retention"`
-	Export       ExportConfig     `json:"export"`
+	Key               string           `json:"key"`
+	Name              string           `json:"name"`
+	Enabled           bool             `json:"enabled"`
+	SourceKey         string           `json:"source_key"`
+	ScheduleKey       string           `json:"schedule_key"`
+	TargetKeys        []string         `json:"target_keys"`
+	ExportOptionKey   string           `json:"export_option_key"`
+	BackupStrategyKey string           `json:"backup_strategy_key"`
+	ObjectPrefix      string           `json:"object_prefix"`
+	Encryption        EncryptionConfig `json:"encryption"`
+	Retention         RetentionConfig  `json:"-"`
 }
 
 type EncryptionConfig struct {
 	Enabled     bool   `json:"enabled"`
-	PasswordEnv string `json:"password_env"`
+	Password    string `json:"password,omitempty"`
+	PasswordEnv string `json:"password_env,omitempty"`
 }
 
 type RetentionConfig struct {
@@ -511,17 +540,27 @@ func (s *Store) SaveUser(tenant string, cfg Config) error {
 	if err != nil {
 		return err
 	}
+	tenant = TenantKey(tenant)
+	if tenant == "" {
+		return fmt.Errorf("tenant is required")
+	}
+	existing, hasExisting, err := s.loadStoredUserConfig(tenant)
+	if err != nil {
+		return err
+	}
 	user := Normalize(WithUserConfig(system, cfg.UserConfig())).UserConfig()
+	if hasExisting {
+		user = MergeUserSecrets(user, existing)
+	}
 	merged := WithUserConfig(system, user)
 	if err := Validate(merged); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(Redacted(WithUserConfig(system, user)).UserConfig(), "", "  ")
+	data, err := json.MarshalIndent(user, "", "  ")
 	if err != nil {
 		return err
 	}
 	ctx := context.Background()
-	tenant = TenantKey(tenant)
 	row, err := s.client.TenantConfig.Query().Where(tenantconfig.Tenant(tenant)).Only(ctx)
 	if ent.IsNotFound(err) {
 		return s.client.TenantConfig.Create().
@@ -537,6 +576,21 @@ func (s *Store) SaveUser(tenant string, cfg Config) error {
 		SetPayload(string(data)).
 		SetUpdatedAt(time.Now().UTC()).
 		Exec(ctx)
+}
+
+func (s *Store) loadStoredUserConfig(tenant string) (UserConfig, bool, error) {
+	row, err := s.client.TenantConfig.Query().Where(tenantconfig.Tenant(TenantKey(tenant))).Only(context.Background())
+	if ent.IsNotFound(err) {
+		return UserConfig{}, false, nil
+	}
+	if err != nil {
+		return UserConfig{}, false, err
+	}
+	var user UserConfig
+	if err := json.Unmarshal([]byte(row.Payload), &user); err != nil {
+		return UserConfig{}, false, fmt.Errorf("decode existing user config: %w", err)
+	}
+	return user, true, nil
 }
 
 func (s *Store) ListUsers() ([]string, error) {
@@ -557,10 +611,12 @@ func (s *Store) Save(cfg Config) error {
 		return err
 	}
 	system := Redacted(cfg)
-	system.Export = Config{}.Export
+	system.Runtime = RuntimeConfig{}
 	system.Sources = nil
 	system.Schedules = nil
 	system.Targets = nil
+	system.ExportOptions = nil
+	system.BackupStrategies = nil
 	system.Tasks = nil
 	system.HistoryLimit = 0
 	system.HistoryRetentionDays = 0
@@ -602,10 +658,9 @@ func Default() Config {
 				Scopes:          []string{"openid", "profile", "email"},
 			},
 		},
-		Export: defaultExportConfig(),
 		Sources: []SourceConfig{
 			{
-				Key:     "local-mem",
+				Key:     DefaultSourceKey,
 				Name:    "Local Nowledge Mem",
 				Enabled: true,
 				Type:    "nowledgemem_api",
@@ -616,25 +671,40 @@ func Default() Config {
 			},
 		},
 		Schedules: []ScheduleConfig{
-			{Key: "daily", Name: "Daily", Enabled: true, Type: "daily", Time: "03:00"},
-			{Key: "weekly", Name: "Weekly", Enabled: false, Type: "weekly", Time: "03:00", Weekday: "sunday"},
+			{Key: DefaultDailyScheduleKey, Name: "Daily", Enabled: true, Type: "daily", Time: "03:00"},
+			{Key: DefaultWeeklyScheduleKey, Name: "Weekly", Enabled: false, Type: "weekly", Time: "03:00", Weekday: "sunday"},
 		},
 		Targets: []TargetConfig{},
+		ExportOptions: []ExportOptionConfig{
+			{
+				Key:    DefaultExportOptionKey,
+				Name:   "Portable export",
+				Export: defaultExportConfig(),
+			},
+		},
+		BackupStrategies: []BackupStrategyConfig{
+			{
+				Key:  DefaultBackupStrategyKey,
+				Name: "No remote cleanup",
+				Retention: RetentionConfig{
+					Mode: "none",
+				},
+			},
+		},
 		Tasks: []TaskConfig{
 			{
-				Key:          "default",
-				Name:         "Default backup",
-				Enabled:      false,
-				SourceKey:    "local-mem",
-				ScheduleKey:  "daily",
-				TargetKeys:   []string{},
-				ObjectPrefix: "nowledge-mem/{task}/{timestamp}",
+				Key:               DefaultTaskKey,
+				Name:              "Default backup",
+				Enabled:           false,
+				SourceKey:         DefaultSourceKey,
+				ScheduleKey:       DefaultDailyScheduleKey,
+				TargetKeys:        []string{},
+				ExportOptionKey:   DefaultExportOptionKey,
+				BackupStrategyKey: DefaultBackupStrategyKey,
+				ObjectPrefix:      "nowledge-mem/{task}/{timestamp}",
 				Encryption: EncryptionConfig{
 					Enabled:     false,
 					PasswordEnv: "NMEM_SNAP_ENCRYPTION_PASSWORD",
-				},
-				Retention: RetentionConfig{
-					Mode: "none",
 				},
 			},
 		},
@@ -672,7 +742,6 @@ func Normalize(cfg Config) Config {
 	if cfg.HistoryRetentionDays <= 0 {
 		cfg.HistoryRetentionDays = 180
 	}
-	cfg.Export = mergeExportConfig(defaultExportConfig(), cfg.Export)
 	for i := range cfg.Sources {
 		cfg.Sources[i].Key = strings.TrimSpace(cfg.Sources[i].Key)
 		cfg.Sources[i].Name = defaultString(strings.TrimSpace(cfg.Sources[i].Name), cfg.Sources[i].Key)
@@ -703,27 +772,57 @@ func Normalize(cfg Config) Config {
 		cfg.Targets[i].S3.SecretAccessKeyEnv = defaultString(strings.TrimSpace(cfg.Targets[i].S3.SecretAccessKeyEnv), targetEnv(cfg.Targets[i].Key, "S3_SECRET_ACCESS_KEY"))
 		cfg.Targets[i].WebDAV.PasswordEnv = defaultString(strings.TrimSpace(cfg.Targets[i].WebDAV.PasswordEnv), targetEnv(cfg.Targets[i].Key, "WEBDAV_PASSWORD"))
 	}
+	if len(cfg.ExportOptions) == 0 {
+		cfg.ExportOptions = []ExportOptionConfig{
+			{Key: DefaultExportOptionKey, Name: "Portable export", Export: defaultExportConfig()},
+		}
+	}
+	for i := range cfg.ExportOptions {
+		cfg.ExportOptions[i].Key = strings.TrimSpace(cfg.ExportOptions[i].Key)
+		cfg.ExportOptions[i].Name = defaultString(strings.TrimSpace(cfg.ExportOptions[i].Name), cfg.ExportOptions[i].Key)
+		cfg.ExportOptions[i].Export = mergeExportConfig(defaultExportConfig(), cfg.ExportOptions[i].Export)
+	}
+	if len(cfg.BackupStrategies) == 0 {
+		cfg.BackupStrategies = []BackupStrategyConfig{
+			{Key: DefaultBackupStrategyKey, Name: "No remote cleanup", Retention: RetentionConfig{Mode: "none"}},
+		}
+	}
+	for i := range cfg.BackupStrategies {
+		cfg.BackupStrategies[i].Key = strings.TrimSpace(cfg.BackupStrategies[i].Key)
+		cfg.BackupStrategies[i].Name = defaultString(strings.TrimSpace(cfg.BackupStrategies[i].Name), cfg.BackupStrategies[i].Key)
+		cfg.BackupStrategies[i].Retention.Mode = strings.ToLower(strings.TrimSpace(cfg.BackupStrategies[i].Retention.Mode))
+		if cfg.BackupStrategies[i].Retention.Mode == "" {
+			cfg.BackupStrategies[i].Retention.Mode = "none"
+		}
+	}
+	defaultExportKey := ""
+	if len(cfg.ExportOptions) > 0 {
+		defaultExportKey = cfg.ExportOptions[0].Key
+	}
+	defaultStrategyKey := ""
+	if len(cfg.BackupStrategies) > 0 {
+		defaultStrategyKey = cfg.BackupStrategies[0].Key
+	}
 	for i := range cfg.Tasks {
 		cfg.Tasks[i].Key = strings.TrimSpace(cfg.Tasks[i].Key)
 		cfg.Tasks[i].Name = defaultString(strings.TrimSpace(cfg.Tasks[i].Name), cfg.Tasks[i].Key)
 		cfg.Tasks[i].SourceKey = strings.TrimSpace(cfg.Tasks[i].SourceKey)
 		cfg.Tasks[i].ScheduleKey = strings.TrimSpace(cfg.Tasks[i].ScheduleKey)
+		cfg.Tasks[i].ExportOptionKey = defaultString(strings.TrimSpace(cfg.Tasks[i].ExportOptionKey), defaultExportKey)
+		cfg.Tasks[i].BackupStrategyKey = defaultString(strings.TrimSpace(cfg.Tasks[i].BackupStrategyKey), defaultStrategyKey)
 		cfg.Tasks[i].ObjectPrefix = defaultString(strings.TrimSpace(cfg.Tasks[i].ObjectPrefix), "nowledge-mem/{task}/{timestamp}")
 		cfg.Tasks[i].Encryption.PasswordEnv = defaultString(strings.TrimSpace(cfg.Tasks[i].Encryption.PasswordEnv), "NMEM_SNAP_ENCRYPTION_PASSWORD")
-		cfg.Tasks[i].Retention.Mode = strings.ToLower(strings.TrimSpace(cfg.Tasks[i].Retention.Mode))
-		if cfg.Tasks[i].Retention.Mode == "" {
-			cfg.Tasks[i].Retention.Mode = "none"
-		}
 	}
 	return cfg
 }
 
 func (c Config) UserConfig() UserConfig {
 	return UserConfig{
-		Export:               c.Export,
 		Sources:              cloneSlice(c.Sources),
 		Schedules:            cloneSlice(c.Schedules),
 		Targets:              cloneSlice(c.Targets),
+		ExportOptions:        cloneSlice(c.ExportOptions),
+		BackupStrategies:     cloneSlice(c.BackupStrategies),
 		Tasks:                cloneSlice(c.Tasks),
 		HistoryLimit:         c.HistoryLimit,
 		HistoryRetentionDays: c.HistoryRetentionDays,
@@ -731,14 +830,92 @@ func (c Config) UserConfig() UserConfig {
 }
 
 func WithUserConfig(system Config, user UserConfig) Config {
-	system.Export = user.Export
 	system.Sources = cloneSlice(user.Sources)
 	system.Schedules = cloneSlice(user.Schedules)
 	system.Targets = cloneSlice(user.Targets)
+	system.ExportOptions = cloneSlice(user.ExportOptions)
+	system.BackupStrategies = cloneSlice(user.BackupStrategies)
 	system.Tasks = cloneSlice(user.Tasks)
 	system.HistoryLimit = user.HistoryLimit
 	system.HistoryRetentionDays = user.HistoryRetentionDays
 	return system
+}
+
+func Runtime() RuntimeConfig {
+	now := time.Now().In(time.Local)
+	zone, offset := now.Zone()
+	timezone := time.Local.String()
+	if strings.TrimSpace(timezone) == "" {
+		timezone = zone
+	}
+	if timezone == "" {
+		timezone = "Local"
+	}
+	return RuntimeConfig{
+		Timezone:      timezone,
+		TimezoneLabel: fmt.Sprintf("%s (%s)", timezone, utcOffset(offset)),
+	}
+}
+
+func utcOffset(seconds int) string {
+	sign := "+"
+	if seconds < 0 {
+		sign = "-"
+		seconds = -seconds
+	}
+	hours := seconds / 3600
+	minutes := (seconds % 3600) / 60
+	return fmt.Sprintf("UTC%s%02d:%02d", sign, hours, minutes)
+}
+
+func MergeUserSecrets(incoming UserConfig, existing UserConfig) UserConfig {
+	sourceByKey := make(map[string]SourceConfig, len(existing.Sources))
+	for _, source := range existing.Sources {
+		sourceByKey[source.Key] = source
+	}
+	for i := range incoming.Sources {
+		existingSource, ok := sourceByKey[incoming.Sources[i].Key]
+		if !ok {
+			continue
+		}
+		incoming.Sources[i] = MergeSourceSecrets(incoming.Sources[i], existingSource)
+	}
+
+	targetByKey := make(map[string]TargetConfig, len(existing.Targets))
+	for _, target := range existing.Targets {
+		targetByKey[target.Key] = target
+	}
+	for i := range incoming.Targets {
+		existingTarget, ok := targetByKey[incoming.Targets[i].Key]
+		if !ok {
+			continue
+		}
+		if incoming.Targets[i].Type == "s3" && incoming.Targets[i].S3.SecretAccessKey == "" {
+			incoming.Targets[i].S3.SecretAccessKey = existingTarget.S3.SecretAccessKey
+		}
+		if incoming.Targets[i].Type == "webdav" && incoming.Targets[i].WebDAV.Password == "" {
+			incoming.Targets[i].WebDAV.Password = existingTarget.WebDAV.Password
+		}
+	}
+
+	taskByKey := make(map[string]TaskConfig, len(existing.Tasks))
+	for _, task := range existing.Tasks {
+		taskByKey[task.Key] = task
+	}
+	for i := range incoming.Tasks {
+		existingTask, ok := taskByKey[incoming.Tasks[i].Key]
+		if ok && incoming.Tasks[i].Encryption.Password == "" {
+			incoming.Tasks[i].Encryption.Password = existingTask.Encryption.Password
+		}
+	}
+	return incoming
+}
+
+func MergeSourceSecrets(incoming SourceConfig, existing SourceConfig) SourceConfig {
+	if incoming.Type == "nowledgemem_api" && incoming.NowledgeMem.APIKey == "" {
+		incoming.NowledgeMem.APIKey = existing.NowledgeMem.APIKey
+	}
+	return incoming
 }
 
 func ApplyEnv(cfg Config) Config {
@@ -753,14 +930,14 @@ func ApplyEnv(cfg Config) Config {
 	}
 	if v := strings.TrimSpace(os.Getenv("NMEM_API_URL")); v != "" {
 		for i := range cfg.Sources {
-			if cfg.Sources[i].Type == "nowledgemem_api" && cfg.Sources[i].Key == "local-mem" {
+			if cfg.Sources[i].Type == "nowledgemem_api" && cfg.Sources[i].Key == DefaultSourceKey {
 				cfg.Sources[i].NowledgeMem.APIURL = v
 			}
 		}
 	}
 	if v := strings.TrimSpace(os.Getenv("NMEM_API_KEY")); v != "" {
 		for i := range cfg.Sources {
-			if cfg.Sources[i].Type == "nowledgemem_api" && cfg.Sources[i].Key == "local-mem" {
+			if cfg.Sources[i].Type == "nowledgemem_api" && cfg.Sources[i].Key == DefaultSourceKey && cfg.Sources[i].NowledgeMem.APIKey == "" {
 				cfg.Sources[i].NowledgeMem.APIKey = v
 			}
 		}
@@ -800,11 +977,21 @@ func ApplyEnv(cfg Config) Config {
 	for i := range cfg.Targets {
 		switch cfg.Targets[i].Type {
 		case "s3":
-			cfg.Targets[i].S3.SecretAccessKey = os.Getenv(cfg.Targets[i].S3.SecretAccessKeyEnv)
+			if cfg.Targets[i].S3.SecretAccessKey == "" {
+				cfg.Targets[i].S3.SecretAccessKey = os.Getenv(cfg.Targets[i].S3.SecretAccessKeyEnv)
+			}
 		case "webdav":
-			cfg.Targets[i].WebDAV.Password = os.Getenv(cfg.Targets[i].WebDAV.PasswordEnv)
+			if cfg.Targets[i].WebDAV.Password == "" {
+				cfg.Targets[i].WebDAV.Password = os.Getenv(cfg.Targets[i].WebDAV.PasswordEnv)
+			}
 		}
 	}
+	for i := range cfg.Tasks {
+		if cfg.Tasks[i].Encryption.Enabled && cfg.Tasks[i].Encryption.Password == "" {
+			cfg.Tasks[i].Encryption.Password = os.Getenv(cfg.Tasks[i].Encryption.PasswordEnv)
+		}
+	}
+	cfg.Runtime = Runtime()
 	return cfg
 }
 
@@ -816,6 +1003,9 @@ func Redacted(cfg Config) Config {
 	for i := range cfg.Targets {
 		cfg.Targets[i].S3.SecretAccessKey = ""
 		cfg.Targets[i].WebDAV.Password = ""
+	}
+	for i := range cfg.Tasks {
+		cfg.Tasks[i].Encryption.Password = ""
 	}
 	return cfg
 }
@@ -922,6 +1112,29 @@ func Validate(cfg Config) error {
 			return fmt.Errorf("target %q type must be s3 or webdav", target.Key)
 		}
 	}
+	exportOptionKeys := make(map[string]struct{})
+	for _, option := range cfg.ExportOptions {
+		if err := validateKey("export option", option.Key); err != nil {
+			return err
+		}
+		if _, ok := exportOptionKeys[option.Key]; ok {
+			return fmt.Errorf("duplicate export option key %q", option.Key)
+		}
+		exportOptionKeys[option.Key] = struct{}{}
+	}
+	backupStrategyKeys := make(map[string]struct{})
+	for _, strategy := range cfg.BackupStrategies {
+		if err := validateKey("backup strategy", strategy.Key); err != nil {
+			return err
+		}
+		if _, ok := backupStrategyKeys[strategy.Key]; ok {
+			return fmt.Errorf("duplicate backup strategy key %q", strategy.Key)
+		}
+		backupStrategyKeys[strategy.Key] = struct{}{}
+		if err := validateRetentionConfig("backup strategy", strategy.Key, strategy.Retention); err != nil {
+			return err
+		}
+	}
 	taskKeys := make(map[string]struct{})
 	for _, task := range cfg.Tasks {
 		if err := validateKey("task", task.Key); err != nil {
@@ -942,33 +1155,43 @@ func Validate(cfg Config) error {
 				return fmt.Errorf("task %q references missing target %q", task.Key, targetKey)
 			}
 		}
-		switch task.Retention.Mode {
-		case "", "none":
-		case "keep_last":
-			if task.Retention.KeepLast < 1 {
-				return fmt.Errorf("task %q retention keep_last must be at least 1", task.Key)
-			}
-		case "keep_days":
-			if task.Retention.KeepDays < 1 {
-				return fmt.Errorf("task %q retention keep_days must be at least 1", task.Key)
-			}
-		case "keep_after":
-			if strings.TrimSpace(task.Retention.KeepAfter) == "" {
-				return fmt.Errorf("task %q retention keep_after is required", task.Key)
-			}
-			if _, err := parseDate(task.Retention.KeepAfter); err != nil {
-				return fmt.Errorf("task %q retention keep_after: %w", task.Key, err)
-			}
-		case "keep_before":
-			if strings.TrimSpace(task.Retention.KeepBefore) == "" {
-				return fmt.Errorf("task %q retention keep_before is required", task.Key)
-			}
-			if _, err := parseDate(task.Retention.KeepBefore); err != nil {
-				return fmt.Errorf("task %q retention keep_before: %w", task.Key, err)
-			}
-		default:
-			return fmt.Errorf("task %q retention mode must be none, keep_last, keep_days, keep_after, or keep_before", task.Key)
+		if _, ok := exportOptionKeys[task.ExportOptionKey]; !ok {
+			return fmt.Errorf("task %q references missing export option %q", task.Key, task.ExportOptionKey)
 		}
+		if _, ok := backupStrategyKeys[task.BackupStrategyKey]; !ok {
+			return fmt.Errorf("task %q references missing backup strategy %q", task.Key, task.BackupStrategyKey)
+		}
+	}
+	return nil
+}
+
+func validateRetentionConfig(kind string, key string, retention RetentionConfig) error {
+	switch retention.Mode {
+	case "", "none":
+	case "keep_last":
+		if retention.KeepLast < 1 {
+			return fmt.Errorf("%s %q retention keep_last must be at least 1", kind, key)
+		}
+	case "keep_days":
+		if retention.KeepDays < 1 {
+			return fmt.Errorf("%s %q retention keep_days must be at least 1", kind, key)
+		}
+	case "keep_after":
+		if strings.TrimSpace(retention.KeepAfter) == "" {
+			return fmt.Errorf("%s %q retention keep_after is required", kind, key)
+		}
+		if _, err := parseDate(retention.KeepAfter); err != nil {
+			return fmt.Errorf("%s %q retention keep_after: %w", kind, key, err)
+		}
+	case "keep_before":
+		if strings.TrimSpace(retention.KeepBefore) == "" {
+			return fmt.Errorf("%s %q retention keep_before is required", kind, key)
+		}
+		if _, err := parseDate(retention.KeepBefore); err != nil {
+			return fmt.Errorf("%s %q retention keep_before: %w", kind, key, err)
+		}
+	default:
+		return fmt.Errorf("%s %q retention mode must be none, keep_last, keep_days, keep_after, or keep_before", kind, key)
 	}
 	return nil
 }
@@ -1086,6 +1309,33 @@ func (c Config) Target(key string) (TargetConfig, bool) {
 	return TargetConfig{}, false
 }
 
+func (c Config) ExportOption(key string) (ExportOptionConfig, bool) {
+	for _, option := range c.ExportOptions {
+		if option.Key == key {
+			return option, true
+		}
+	}
+	return ExportOptionConfig{}, false
+}
+
+func (c Config) BackupStrategy(key string) (BackupStrategyConfig, bool) {
+	for _, strategy := range c.BackupStrategies {
+		if strategy.Key == key {
+			return strategy, true
+		}
+	}
+	return BackupStrategyConfig{}, false
+}
+
+func (c Config) ResolveTask(task TaskConfig) (TaskConfig, error) {
+	strategy, ok := c.BackupStrategy(task.BackupStrategyKey)
+	if !ok {
+		return TaskConfig{}, fmt.Errorf("backup strategy %q was not found", task.BackupStrategyKey)
+	}
+	task.Retention = strategy.Retention
+	return task, nil
+}
+
 func defaultExportConfig() ExportConfig {
 	return ExportConfig{
 		IncludeMemories:             boolPtr(true),
@@ -1101,6 +1351,10 @@ func defaultExportConfig() ExportConfig {
 		IncludeWorkingMemoryArchive: boolPtr(false),
 		IncludeSourceFiles:          boolPtr(false),
 	}
+}
+
+func DefaultExportConfig() ExportConfig {
+	return defaultExportConfig()
 }
 
 func mergeExportConfig(base ExportConfig, override ExportConfig) ExportConfig {
@@ -1142,10 +1396,6 @@ func mergeExportConfig(base ExportConfig, override ExportConfig) ExportConfig {
 		result.IncludeSourceFiles = override.IncludeSourceFiles
 	}
 	return result
-}
-
-func (t TaskConfig) EffectiveExport(global ExportConfig) ExportConfig {
-	return mergeExportConfig(global, t.Export)
 }
 
 func ParseClock(raw string) (hour int, minute int, err error) {
