@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Card, Switch, Title, Tooltip } from 'animal-island-ui';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Inbox, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { useI18n } from '../i18n';
 import type { Profile } from '../types';
@@ -94,5 +94,10 @@ export function FormGrid({ children }: { children: React.ReactNode }) {
 }
 
 export function Empty({ text }: { text: string }) {
-  return <Card color="app-yellow" pattern="app-yellow" className="empty">{text}</Card>;
+  return (
+    <Card color="app-yellow" pattern="app-yellow" className="empty">
+      <Inbox aria-hidden="true" />
+      <span>{text}</span>
+    </Card>
+  );
 }

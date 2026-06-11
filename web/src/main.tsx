@@ -3,14 +3,23 @@ import { createRoot } from 'react-dom/client';
 import { Button, Card, Cursor, Input, Tabs, Tooltip } from 'animal-island-ui';
 import 'animal-island-ui/style';
 import {
+  ArchiveRestore,
+  CalendarClock,
   ChevronDown,
   CheckCircle2,
   DatabaseBackup,
+  Ellipsis,
+  FileDown,
   FolderArchive,
+  History,
   Languages,
   LogOut,
+  Recycle,
+  Settings,
   ShipWheel,
+  UserCog,
   UserRound,
+  X,
   XCircle
 } from 'lucide-react';
 import {
@@ -247,6 +256,12 @@ function Dashboard() {
       window.location.href = appPath(`/login?next=${encodeURIComponent(currentAppPath())}`);
     });
   }, []);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
 
   const persist = async (next: Config, successMessage: string) => {
     setSaving(true);
@@ -507,34 +522,25 @@ function Dashboard() {
       </header>
 
       <section className="stats">
-        <Stat icon={<DatabaseBackup />} label={t('sources')} value={summary.sources} />
-        <Stat icon={<ShipWheel />} label={t('targets')} value={summary.targets} />
-        <Stat icon={<FolderArchive />} label={t('tasks')} value={summary.tasks} />
+        <Stat icon={<DatabaseBackup />} label={t('sources')} value={summary.sources} onClick={() => setActiveTab('sources')} />
+        <Stat icon={<ShipWheel />} label={t('targets')} value={summary.targets} onClick={() => setActiveTab('targets')} />
+        <Stat icon={<FolderArchive />} label={t('tasks')} value={summary.tasks} onClick={() => setActiveTab('tasks')} />
       </section>
 
       {(message || error) && (
-        <div className={`notice ${error ? 'danger' : 'success'}`}>
+        <div className={`notice ${error ? 'danger' : 'success'}`} role={error ? 'alert' : 'status'}>
           {error ? <XCircle size={18} /> : <CheckCircle2 size={18} />}
           <span>{error || message}</span>
         </div>
       )}
 
-      <nav className="mobile-section-nav" aria-label={t('sectionNavigation')}>
-        {dashboardTabs.map((item, index) => (
-          <button
-            key={item.key}
-            type="button"
-            className={`mobile-section-tab ${activeTab === item.key ? 'active' : ''}`}
-            aria-current={activeTab === item.key ? 'page' : undefined}
-            onClick={() => setActiveTab(item.key)}
-          >
-            <span className="mobile-section-index">{String(index + 1).padStart(2, '0')}</span>
-            <span className="mobile-section-label">{item.label}</span>
-          </button>
-        ))}
-      </nav>
-
       <Tabs className="dashboard-tabs" activeKey={activeTab} onChange={setActiveTab} items={dashboardTabs} leafAnimation={false} />
+
+      <MobileNav
+        items={dashboardTabs.map(({ key, label }) => ({ key, label }))}
+        activeKey={activeTab}
+        onSelect={setActiveTab}
+      />
 
       <AppFooter versionInfo={versionInfo} />
 
@@ -598,8 +604,119 @@ function Dashboard() {
   );
 }
 
-function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
-  return <Card color="app-green" pattern="app-green" className="stat"><div>{icon}</div><span>{label}</span><strong>{value}</strong></Card>;
+function Stat({ icon, label, value, onClick }: { icon: React.ReactNode; label: string; value: number; onClick?: () => void }) {
+  const card = <Card color="app-green" pattern="app-green" className="stat"><div>{icon}</div><span>{label}</span><strong>{value}</strong></Card>;
+  if (!onClick) return card;
+  return <button type="button" className="stat-link" onClick={onClick}>{card}</button>;
+}
+
+const sectionIcons: Record<string, React.ReactNode> = {
+  sources: <DatabaseBackup />,
+  targets: <ShipWheel />,
+  schedules: <CalendarClock />,
+  'export-options': <FileDown />,
+  'backup-strategies': <Recycle />,
+  tasks: <FolderArchive />,
+  runs: <History />,
+  restore: <ArchiveRestore />,
+  settings: <Settings />,
+  site: <UserCog />
+};
+
+const primarySections = ['sources', 'tasks', 'runs', 'restore'];
+
+function MobileNav({ items, activeKey, onSelect }: {
+  items: Array<{ key: string; label: React.ReactNode }>;
+  activeKey: string;
+  onSelect: (key: string) => void;
+}) {
+  const { t } = useI18n();
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const primary = primarySections
+    .map((key) => items.find((item) => item.key === key))
+    .filter((item): item is { key: string; label: React.ReactNode } => Boolean(item));
+  const moreActive = !primarySections.includes(activeKey);
+
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSheetOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [sheetOpen]);
+
+  const select = (key: string) => {
+    onSelect(key);
+    setSheetOpen(false);
+    window.scrollTo({ top: 0 });
+  };
+
+  return (
+    <>
+      <nav className="bottom-nav" aria-label={t('sectionNavigation')}>
+        {primary.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`bottom-nav-item ${activeKey === item.key ? 'active' : ''}`}
+            aria-current={activeKey === item.key ? 'page' : undefined}
+            onClick={() => select(item.key)}
+          >
+            <span className="bottom-nav-icon">{sectionIcons[item.key]}</span>
+            <span className="bottom-nav-label">{item.label}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          className={`bottom-nav-item ${moreActive ? 'active' : ''}`}
+          aria-expanded={sheetOpen}
+          onClick={() => setSheetOpen((open) => !open)}
+        >
+          <span className="bottom-nav-icon"><Ellipsis /></span>
+          <span className="bottom-nav-label">{t('more')}</span>
+        </button>
+      </nav>
+      {sheetOpen && (
+        <div className="sheet-scrim" onClick={() => setSheetOpen(false)}>
+          <div
+            className="section-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('sectionNavigation')}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="sheet-handle" aria-hidden="true" />
+            <header className="sheet-head">
+              <strong>{t('sectionNavigation')}</strong>
+              <button type="button" className="sheet-close" aria-label={t('close')} onClick={() => setSheetOpen(false)}>
+                <X size={18} />
+              </button>
+            </header>
+            <div className="sheet-grid">
+              {items.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`sheet-item ${activeKey === item.key ? 'active' : ''}`}
+                  aria-current={activeKey === item.key ? 'page' : undefined}
+                  onClick={() => select(item.key)}
+                >
+                  {sectionIcons[item.key]}
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function AppFooter({ versionInfo }: { versionInfo: VersionInfo | null }) {
