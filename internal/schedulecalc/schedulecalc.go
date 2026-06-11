@@ -3,7 +3,7 @@ package schedulecalc
 import (
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
 )
 
 func Runtime(now time.Time, task config.TaskConfig, schedule config.ScheduleConfig, hasSchedule bool) config.TaskRuntime {

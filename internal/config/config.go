@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/persist"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/user"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/user"
 )
 
 const (

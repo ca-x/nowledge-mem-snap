@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/afero"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
 )
 
 func TestApplyRetentionKeepLastIsScopedToTaskDirectory(t *testing.T) {

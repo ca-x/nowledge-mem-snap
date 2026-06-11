@@ -18,7 +18,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
 )
 
 const (

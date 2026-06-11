@@ -8,8 +8,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/predicate"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/predicate"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
 )
 
 // SystemConfigDelete is the builder for deleting a SystemConfig entity.

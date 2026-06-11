@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/archive"
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
-	"github.com/lib-x/nowledge-mem-snap/internal/history"
-	"github.com/lib-x/nowledge-mem-snap/internal/source"
-	"github.com/lib-x/nowledge-mem-snap/internal/storage"
+	"github.com/ca-x/nowledge-mem-snap/internal/archive"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/history"
+	"github.com/ca-x/nowledge-mem-snap/internal/source"
+	"github.com/ca-x/nowledge-mem-snap/internal/storage"
 )
 
 type Runner struct {

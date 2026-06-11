@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
 )
 
 // SystemConfig is the model entity for the SystemConfig schema.

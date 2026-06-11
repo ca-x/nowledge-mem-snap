@@ -2,7 +2,7 @@
 
 package runtime
 
-// The schema-stitching logic is generated in github.com/lib-x/nowledge-mem-snap/internal/persist/ent/runtime.go
+// The schema-stitching logic is generated in github.com/ca-x/nowledge-mem-snap/internal/persist/ent/runtime.go
 
 const (
 	Version = "v0.14.6"                                         // Version of ent codegen.

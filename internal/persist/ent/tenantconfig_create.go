@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
 )
 
 // TenantConfigCreate is the builder for creating a TenantConfig entity.

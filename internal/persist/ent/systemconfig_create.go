@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
 )
 
 // SystemConfigCreate is the builder for creating a SystemConfig entity.

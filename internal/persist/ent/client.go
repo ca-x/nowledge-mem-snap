@@ -9,15 +9,15 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/migrate"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/migrate"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/runrecord"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/user"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/runrecord"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/user"
 )
 
 // Client is the client that holds all ent builders.

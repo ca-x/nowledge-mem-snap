@@ -57,7 +57,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.7`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.8`。
 - `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 

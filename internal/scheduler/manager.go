@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/backup"
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
-	"github.com/lib-x/nowledge-mem-snap/internal/history"
-	"github.com/lib-x/nowledge-mem-snap/internal/schedulecalc"
-	"github.com/lib-x/nowledge-mem-snap/internal/tasktimer"
+	"github.com/ca-x/nowledge-mem-snap/internal/backup"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/history"
+	"github.com/ca-x/nowledge-mem-snap/internal/schedulecalc"
+	"github.com/ca-x/nowledge-mem-snap/internal/tasktimer"
 )
 
 type Manager struct {

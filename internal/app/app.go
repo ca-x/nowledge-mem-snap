@@ -12,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/backup"
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
-	"github.com/lib-x/nowledge-mem-snap/internal/history"
-	"github.com/lib-x/nowledge-mem-snap/internal/scheduler"
-	"github.com/lib-x/nowledge-mem-snap/internal/server"
-	"github.com/lib-x/nowledge-mem-snap/version"
+	"github.com/ca-x/nowledge-mem-snap/internal/backup"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/history"
+	"github.com/ca-x/nowledge-mem-snap/internal/scheduler"
+	"github.com/ca-x/nowledge-mem-snap/internal/server"
+	"github.com/ca-x/nowledge-mem-snap/version"
 )
 
 func Run(web embed.FS, args []string) int {

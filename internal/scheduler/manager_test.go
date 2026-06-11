@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
 )
 
 func TestSnapshotFromConfigReportsTaskStates(t *testing.T) {

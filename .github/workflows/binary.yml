@@ -106,9 +106,9 @@ jobs:
           mkdir -p dist
           go build -trimpath \
             -ldflags="-s -w \
-              -X 'github.com/lib-x/nowledge-mem-snap/version.Version=${{ github.ref_name }}' \
-              -X 'github.com/lib-x/nowledge-mem-snap/version.BuildTime=${{ steps.meta.outputs.build_time }}' \
-              -X 'github.com/lib-x/nowledge-mem-snap/version.GitCommit=${{ github.sha }}'" \
+              -X 'github.com/ca-x/nowledge-mem-snap/version.Version=${{ github.ref_name }}' \
+              -X 'github.com/ca-x/nowledge-mem-snap/version.BuildTime=${{ steps.meta.outputs.build_time }}' \
+              -X 'github.com/ca-x/nowledge-mem-snap/version.GitCommit=${{ github.sha }}'" \
             -o dist/${{ matrix.exe }} .
       - name: Create archive
         run: |

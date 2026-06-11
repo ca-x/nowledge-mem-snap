@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/predicate"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/predicate"
 )
 
 // ID filters vertices based on their ID field.

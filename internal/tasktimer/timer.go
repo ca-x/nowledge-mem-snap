@@ -2,13 +2,22 @@ package tasktimer
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
-	"github.com/lib-x/nowledge-mem-snap/internal/schedulecalc"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/schedulecalc"
+	"github.com/lib-x/timewheel/scheduler"
 )
+
+const (
+	wheelInterval = 250 * time.Millisecond
+	wheelSlots    = 240
+)
+
+var errInvalidSchedule = errors.New("invalid schedule")
 
 type RunFunc func(context.Context, config.TaskConfig) error
 
@@ -19,30 +28,50 @@ type Entry struct {
 }
 
 type Timer struct {
-	run        RunFunc
 	logger     *slog.Logger
 	onOnceDone func(taskKey string) error
 
-	commands chan command
-	done     chan struct{}
-	cancel   context.CancelFunc
+	scheduler *scheduler.Scheduler[string, scheduledEntry]
+
+	mu      sync.RWMutex
+	entries map[string]scheduledEntry
+	nextID  uint64
 
 	startOnce sync.Once
 	stopOnce  sync.Once
-	runWG     sync.WaitGroup
+}
+
+type scheduledEntry struct {
+	Entry
+	version uint64
 }
 
 func New(run RunFunc, logger *slog.Logger, onOnceDone func(taskKey string) error) *Timer {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Timer{
-		run:        run,
+	t := &Timer{
 		logger:     logger,
 		onOnceDone: onOnceDone,
-		commands:   make(chan command, 64),
-		done:       make(chan struct{}),
+		entries:    make(map[string]scheduledEntry),
 	}
+	s, err := scheduler.NewScheduler[string, scheduledEntry](
+		scheduler.Options[string, scheduledEntry]{
+			Next:             t.nextRun,
+			Run:              runEntry(run),
+			OnFinish:         t.finish,
+			ReschedulePolicy: scheduler.RescheduleAfterFinish,
+		},
+		scheduler.WithWheel(wheelInterval, wheelSlots),
+		scheduler.WithCancelRunningOnRemove(true),
+		scheduler.WithCancelRunningOnReplace(true),
+		scheduler.WithWaitRunningOnClose(true),
+	)
+	if err != nil {
+		panic(err)
+	}
+	t.scheduler = s
+	return t
 }
 
 func (t *Timer) Start(parent context.Context) {
@@ -50,295 +79,178 @@ func (t *Timer) Start(parent context.Context) {
 		if parent == nil {
 			parent = context.Background()
 		}
-		ctx, cancel := context.WithCancel(parent)
-		t.cancel = cancel
-		go t.loop(ctx)
+		if err := t.scheduler.Start(parent); err != nil {
+			t.logger.Warn("failed to start task timer", "error", err)
+		}
 	})
 }
 
 func (t *Timer) Stop() {
 	t.stopOnce.Do(func() {
-		if t.cancel != nil {
-			t.cancel()
+		if err := t.scheduler.Close(); err != nil {
+			t.logger.Warn("failed to stop task timer", "error", err)
 		}
-		<-t.done
-		t.runWG.Wait()
 	})
 }
 
 func (t *Timer) ReplaceAll(entries []Entry) {
-	t.send(command{kind: commandReplaceAll, entries: cloneEntries(entries)})
+	items := make([]scheduler.Item[string, scheduledEntry], 0, len(entries))
+	next := make(map[string]scheduledEntry, len(entries))
+
+	t.mu.Lock()
+	for _, entry := range cloneEntries(entries) {
+		data := scheduledEntry{Entry: entry, version: t.nextVersionLocked()}
+		next[entry.Task.Key] = data
+		items = append(items, scheduler.Item[string, scheduledEntry]{
+			Key:  entry.Task.Key,
+			Data: data,
+		})
+	}
+	t.entries = next
+	t.mu.Unlock()
+
+	if err := t.scheduler.ReplaceAll(items); err != nil {
+		t.logger.Warn("failed to replace scheduled tasks", "error", err)
+	}
 }
 
 func (t *Timer) Upsert(entry Entry) {
-	t.send(command{kind: commandUpsert, entry: entry})
+	data := scheduledEntry{Entry: entry}
+
+	t.mu.Lock()
+	data.version = t.nextVersionLocked()
+	t.entries[entry.Task.Key] = data
+	t.mu.Unlock()
+
+	if err := t.scheduler.Upsert(scheduler.Item[string, scheduledEntry]{
+		Key:  entry.Task.Key,
+		Data: data,
+	}); err != nil {
+		t.logger.Warn("failed to upsert scheduled task", "task", entry.Task.Key, "error", err)
+	}
 }
 
 func (t *Timer) Remove(taskKey string) {
 	if taskKey == "" {
 		return
 	}
-	t.send(command{kind: commandRemove, key: taskKey})
+
+	t.mu.Lock()
+	delete(t.entries, taskKey)
+	t.mu.Unlock()
+
+	if err := t.scheduler.Remove(taskKey); err != nil {
+		t.logger.Warn("failed to remove scheduled task", "task", taskKey, "error", err)
+	}
 }
 
 func (t *Timer) Snapshot() map[string]config.TaskRuntime {
-	reply := make(chan map[string]config.TaskRuntime, 1)
-	if !t.send(command{kind: commandSnapshot, reply: reply}) {
+	snapshot := t.scheduler.Snapshot()
+	if snapshot == nil {
 		return nil
 	}
-	select {
-	case snapshot := <-reply:
-		return snapshot
-	case <-t.done:
-		return nil
-	}
-}
 
-func (t *Timer) send(cmd command) bool {
-	select {
-	case t.commands <- cmd:
-		return true
-	case <-t.done:
-		return false
-	}
-}
-
-func (t *Timer) finish(taskKey string, generation uint64, err error) {
-	t.send(command{kind: commandFinished, key: taskKey, generation: generation, err: err})
-}
-
-type commandKind int
-
-const (
-	commandReplaceAll commandKind = iota
-	commandUpsert
-	commandRemove
-	commandSnapshot
-	commandFinished
-)
-
-type command struct {
-	kind       commandKind
-	entries    []Entry
-	entry      Entry
-	key        string
-	generation uint64
-	err        error
-	reply      chan map[string]config.TaskRuntime
-}
-
-type taskState struct {
-	entry      Entry
-	status     string
-	nextRunAt  *time.Time
-	generation uint64
-	running    bool
-	cancel     context.CancelFunc
-}
-
-type loopState struct {
-	states map[string]*taskState
-	queue  scheduleHeap
-	nextID uint64
-}
-
-func (t *Timer) loop(ctx context.Context) {
-	state := loopState{states: make(map[string]*taskState)}
-	state.queue.init()
-	timer := time.NewTimer(time.Hour)
-	stopTimer(timer)
-	var timerC <-chan time.Time
-
-	resetTimer := func() {
-		stopTimer(timer)
-		timerC = nil
-		if due, ok := state.nextDue(); ok {
-			delay := time.Until(due)
-			if delay < 0 {
-				delay = 0
-			}
-			timer.Reset(delay)
-			timerC = timer.C
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			stopTimer(timer)
-			state.cancelAll()
-			close(t.done)
-			return
-		case cmd := <-t.commands:
-			t.handle(&state, cmd)
-			state.runDue(ctx, t, time.Now().In(time.Local))
-			resetTimer()
-		case <-timerC:
-			state.runDue(ctx, t, time.Now().In(time.Local))
-			resetTimer()
-		}
-	}
-}
-
-func (t *Timer) handle(state *loopState, cmd command) {
-	switch cmd.kind {
-	case commandReplaceAll:
-		state.replaceAll(cmd.entries)
-	case commandUpsert:
-		state.upsert(cmd.entry)
-	case commandRemove:
-		state.remove(cmd.key)
-	case commandSnapshot:
-		cmd.reply <- state.snapshot()
-	case commandFinished:
-		state.finish(t, cmd.key, cmd.generation, cmd.err)
-	}
-}
-
-func (s *loopState) replaceAll(entries []Entry) {
-	s.cancelAll()
-	s.states = make(map[string]*taskState, len(entries))
-	s.queue = scheduleHeap{}
-	s.queue.init()
 	now := time.Now().In(time.Local)
-	for _, entry := range entries {
-		st := &taskState{entry: entry, generation: s.nextGeneration()}
-		s.plan(now, st)
-		s.states[entry.Task.Key] = st
-	}
-}
+	out := make(map[string]config.TaskRuntime, len(snapshot))
 
-func (s *loopState) upsert(entry Entry) {
-	now := time.Now().In(time.Local)
-	if old := s.states[entry.Task.Key]; old != nil {
-		old.cancelRun()
-	}
-	st := &taskState{entry: entry, generation: s.nextGeneration()}
-	s.plan(now, st)
-	s.states[entry.Task.Key] = st
-}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
-func (s *loopState) remove(taskKey string) {
-	st := s.states[taskKey]
-	if st != nil {
-		st.cancelRun()
-	}
-	delete(s.states, taskKey)
-}
-
-func (s *loopState) finish(t *Timer, taskKey string, generation uint64, err error) {
-	st := s.states[taskKey]
-	if st == nil || st.generation != generation {
-		return
-	}
-	st.running = false
-	st.cancel = nil
-	st.generation = s.nextGeneration()
-	if err != nil {
-		t.logger.Warn("scheduled task run finished with error", "task", taskKey, "error", err)
-	}
-	if st.entry.Schedule.Type == "once" {
-		if t.onOnceDone != nil {
-			if err := t.onOnceDone(taskKey); err != nil {
-				t.logger.Warn("failed to disable one-time task", "task", taskKey, "schedule", st.entry.Schedule.Key, "error", err)
-			} else {
-				t.logger.Info("one-time task disabled", "task", taskKey, "schedule", st.entry.Schedule.Key)
-			}
-		}
-		st.entry.Task.Enabled = false
-		st.status = config.TaskRuntimeStatusDisabled
-		st.nextRunAt = nil
-		return
-	}
-	s.plan(time.Now().In(time.Local), st)
-}
-
-func (s *loopState) plan(now time.Time, st *taskState) {
-	runtime := schedulecalc.Runtime(now, st.entry.Task, st.entry.Schedule, st.entry.HasSchedule)
-	st.status = runtime.Status
-	st.nextRunAt = cloneTime(runtime.NextRunAt)
-	if runtime.NextRunAt != nil {
-		s.queue.push(scheduleItem{key: st.entry.Task.Key, due: *runtime.NextRunAt, generation: st.generation})
-	}
-}
-
-func (s *loopState) runDue(ctx context.Context, t *Timer, now time.Time) {
-	for {
-		due, ok := s.nextDue()
-		if !ok || due.After(now) {
-			return
-		}
-		item := s.queue.pop()
-		st := s.states[item.key]
-		if st == nil || st.generation != item.generation || st.running {
+	for key, runtime := range snapshot {
+		entry, ok := t.entries[key]
+		if !ok {
 			continue
 		}
-		st.running = true
-		st.status = config.TaskRuntimeStatusRunning
-		st.nextRunAt = nil
-		st.generation = s.nextGeneration()
-		runGeneration := st.generation
-		runCtx, cancel := context.WithCancel(ctx)
-		st.cancel = cancel
-		task := st.entry.Task
-		t.runWG.Add(1)
-		go func() {
-			defer t.runWG.Done()
-			err := t.run(runCtx, task)
-			cancel()
-			t.finish(task.Key, runGeneration, err)
-		}()
-	}
-}
-
-func (s *loopState) nextDue() (time.Time, bool) {
-	for s.queue.Len() > 0 {
-		item := s.queue[0]
-		st := s.states[item.key]
-		if st != nil && st.generation == item.generation && !st.running {
-			return item.due, true
-		}
-		s.queue.pop()
-	}
-	return time.Time{}, false
-}
-
-func (s *loopState) snapshot() map[string]config.TaskRuntime {
-	out := make(map[string]config.TaskRuntime, len(s.states))
-	for key, st := range s.states {
-		out[key] = config.TaskRuntime{
-			Status:    st.status,
-			NextRunAt: cloneTime(st.nextRunAt),
-		}
+		out[key] = toTaskRuntime(now, entry.Entry, runtime)
 	}
 	return out
 }
 
-func (s *loopState) cancelAll() {
-	for _, st := range s.states {
-		st.cancelRun()
-	}
-}
-
-func (s *loopState) nextGeneration() uint64 {
-	s.nextID++
-	return s.nextID
-}
-
-func (st *taskState) cancelRun() {
-	if st.cancel != nil {
-		st.cancel()
-		st.cancel = nil
-	}
-	st.running = false
-}
-
-func stopTimer(timer *time.Timer) {
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
+func (t *Timer) nextRun(now time.Time, _ string, entry scheduledEntry) (time.Time, bool, error) {
+	runtime := schedulecalc.Runtime(now.In(time.Local), entry.Task, entry.Schedule, entry.HasSchedule)
+	switch runtime.Status {
+	case config.TaskRuntimeStatusScheduled:
+		if runtime.NextRunAt == nil {
+			return time.Time{}, false, errInvalidSchedule
 		}
+		return *runtime.NextRunAt, true, nil
+	case config.TaskRuntimeStatusInvalidSchedule:
+		return time.Time{}, false, errInvalidSchedule
+	default:
+		return time.Time{}, false, nil
+	}
+}
+
+func (t *Timer) finish(taskKey string, entry scheduledEntry, runErr error) {
+	if runErr != nil {
+		t.logger.Warn("scheduled task run finished with error", "task", taskKey, "error", runErr)
+	}
+	if entry.Schedule.Type != "once" {
+		return
+	}
+	if !t.isCurrent(taskKey, entry.version) {
+		return
+	}
+
+	entry.Task.Enabled = false
+
+	t.mu.Lock()
+	if current, ok := t.entries[taskKey]; !ok || current.version != entry.version {
+		t.mu.Unlock()
+		return
+	}
+	entry.version = t.nextVersionLocked()
+	t.entries[taskKey] = entry
+	t.mu.Unlock()
+
+	if err := t.scheduler.Upsert(scheduler.Item[string, scheduledEntry]{
+		Key:  taskKey,
+		Data: entry,
+	}); err != nil {
+		t.logger.Warn("failed to update one-time task runtime", "task", taskKey, "error", err)
+	}
+
+	if t.onOnceDone != nil {
+		if err := t.onOnceDone(taskKey); err != nil {
+			t.logger.Warn("failed to disable one-time task", "task", taskKey, "schedule", entry.Schedule.Key, "error", err)
+		} else {
+			t.logger.Info("one-time task disabled", "task", taskKey, "schedule", entry.Schedule.Key)
+		}
+	}
+}
+
+func (t *Timer) isCurrent(taskKey string, version uint64) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	current, ok := t.entries[taskKey]
+	return ok && current.version == version
+}
+
+func (t *Timer) nextVersionLocked() uint64 {
+	t.nextID++
+	return t.nextID
+}
+
+func runEntry(run RunFunc) scheduler.RunFunc[string, scheduledEntry] {
+	return func(ctx context.Context, _ string, entry scheduledEntry) error {
+		if run == nil {
+			return nil
+		}
+		return run(ctx, entry.Task)
+	}
+}
+
+func toTaskRuntime(now time.Time, entry Entry, runtime scheduler.Runtime) config.TaskRuntime {
+	switch runtime.State {
+	case scheduler.StateRunning:
+		return config.TaskRuntime{Status: config.TaskRuntimeStatusRunning}
+	case scheduler.StatePending:
+		return config.TaskRuntime{
+			Status:    config.TaskRuntimeStatusScheduled,
+			NextRunAt: cloneTime(runtime.NextRunAt),
+		}
+	default:
+		return schedulecalc.Runtime(now, entry.Task, entry.Schedule, entry.HasSchedule)
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"embed"
 	"os"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/app"
+	"github.com/ca-x/nowledge-mem-snap/internal/app"
 )
 
 //go:embed all:web/dist

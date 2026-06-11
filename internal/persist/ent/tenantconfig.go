@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
 )
 
 // TenantConfig is the model entity for the TenantConfig schema.

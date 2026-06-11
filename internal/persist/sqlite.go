@@ -10,7 +10,7 @@ import (
 
 	"entgo.io/ent/dialect"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib-x/entsqlite"

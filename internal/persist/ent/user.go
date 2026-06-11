@@ -9,7 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/user"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/user"
 )
 
 // User is the model entity for the User schema.

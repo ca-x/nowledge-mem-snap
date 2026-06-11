@@ -25,9 +25,9 @@ RUN test -f web/dist/index.html
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w -extldflags '-static' \
-      -X 'github.com/lib-x/nowledge-mem-snap/version.Version=${VERSION}' \
-      -X 'github.com/lib-x/nowledge-mem-snap/version.BuildTime=${BUILD_TIME}' \
-      -X 'github.com/lib-x/nowledge-mem-snap/version.GitCommit=${GIT_COMMIT}'" \
+      -X 'github.com/ca-x/nowledge-mem-snap/version.Version=${VERSION}' \
+      -X 'github.com/ca-x/nowledge-mem-snap/version.BuildTime=${BUILD_TIME}' \
+      -X 'github.com/ca-x/nowledge-mem-snap/version.GitCommit=${GIT_COMMIT}'" \
     -o nowledge-mem-snap .
 
 FROM alpine:latest

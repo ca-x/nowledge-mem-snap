@@ -57,7 +57,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.7`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.8`.
 - `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 

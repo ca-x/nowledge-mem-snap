@@ -19,8 +19,8 @@ import (
 	"github.com/lib-x/aferodav"
 	"github.com/spf13/afero"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/archive"
-	"github.com/lib-x/nowledge-mem-snap/internal/config"
+	"github.com/ca-x/nowledge-mem-snap/internal/archive"
+	"github.com/ca-x/nowledge-mem-snap/internal/config"
 )
 
 type Target struct {

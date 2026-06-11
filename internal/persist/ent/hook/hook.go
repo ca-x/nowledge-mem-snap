@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent"
 )
 
 // The RunRecordFunc type is an adapter to allow the use of ordinary

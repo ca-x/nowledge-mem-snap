@@ -3,8 +3,8 @@
 package ent
 
 import (
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/schema"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/user"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/schema"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/user"
 )
 
 // The init function reads all schema descriptors with runtime code

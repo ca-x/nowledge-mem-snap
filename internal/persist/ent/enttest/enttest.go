@@ -5,12 +5,12 @@ package enttest
 import (
 	"context"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent"
 	// required by schema hooks.
-	_ "github.com/lib-x/nowledge-mem-snap/internal/persist/ent/runtime"
+	_ "github.com/ca-x/nowledge-mem-snap/internal/persist/ent/runtime"
 
 	"entgo.io/ent/dialect/sql/schema"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/migrate"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/migrate"
 )
 
 type (

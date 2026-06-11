@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent"
-	"github.com/lib-x/nowledge-mem-snap/internal/persist/ent/runrecord"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/runrecord"
 )
 
 type Run struct {
