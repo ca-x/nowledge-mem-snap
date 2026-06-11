@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Self-hosted backup service for Nowledge Mem.
+Self-hosted backup service for [Nowledge Mem](https://mem.nowledge.co).
 
 It backs up each logged-in user's private configuration to S3-compatible storage and WebDAV targets. The preferred source is Nowledge Mem's application-level Data Transfer API. Directory sources are supported for operator-managed Docker volume snapshots, but only under explicitly allowed roots.
 

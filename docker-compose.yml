@@ -8,10 +8,34 @@ services:
     ports:
       - "14335:14335"
     volumes:
+      # Default: Docker named volume.
       - snap-data:/app/data
-      # Optional operator-level directory snapshot sources for Nowledge Mem Docker:
+      # Alternative: host-path bind mount. `./snap-data` is relative to this docker-compose.yml file.
+      # - type: bind
+      #   source: ./snap-data
+      #   target: /app/data
+      # Optional operator-level directory snapshot sources for the official Nowledge Mem Docker layout.
+      # Official Nowledge Mem compose stores irreplaceable data in `./data` and valuable config in `./config`.
+      # `./cache` is rebuildable cache, so it is not mounted here by default.
+      # If this compose file is not next to those directories, replace `source` with absolute host paths.
+      #
+      # Short bind syntax:
       # - ./data:/mem-data:ro
       # - ./config:/mem-config:ro
+      #
+      # Equivalent long bind syntax:
+      # - type: bind
+      #   source: ./data
+      #   target: /mem-data
+      #   read_only: true
+      # - type: bind
+      #   source: ./config
+      #   target: /mem-config
+      #   read_only: true
+      #
+      # After mounting directory sources, enable them in example.env:
+      # NMEM_SNAP_ALLOWED_SOURCE_ROOTS=mem-data=/mem-data,mem-config=/mem-config
+      # Format: root-key=/container/path. The path must match the mount target above.
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:14335/healthz"]
       interval: 30s
@@ -22,7 +46,8 @@ services:
   # Default database:
   # - The app uses SQLite by default.
   # - Keep `NMEM_SNAP_DATABASE_TYPE=sqlite` and `NMEM_SNAP_DATABASE_DSN=` in example.env.
-  # - SQLite data is stored under the `snap-data` volume at /app/data/data.db.
+  # - With the default named volume, SQLite data is stored at /app/data/data.db inside the container.
+  # - If you switch to the bind mount above, it is stored under `./snap-data/data.db` on the host.
   #
   # Optional PostgreSQL example:
   # 1. Uncomment this service and the `snap-postgres` volume below.
@@ -45,7 +70,12 @@ services:
   #     timeout: 5s
   #     retries: 5
   #   volumes:
+  #     # Default: Docker named volume.
   #     - snap-postgres:/var/lib/postgresql/data
+  #     # Alternative: host-path bind mount.
+  #     # - type: bind
+  #     #   source: ./postgres-data
+  #     #   target: /var/lib/postgresql/data
   #
   # Optional MySQL/MariaDB example:
   # 1. Uncomment this service and the `snap-mysql` volume below.
@@ -69,11 +99,16 @@ services:
   #     timeout: 5s
   #     retries: 10
   #   volumes:
+  #     # Default: Docker named volume.
   #     - snap-mysql:/var/lib/mysql
+  #     # Alternative: host-path bind mount.
+  #     # - type: bind
+  #     #   source: ./mysql-data
+  #     #   target: /var/lib/mysql
 
 volumes:
   snap-data:
-  # Uncomment with the optional PostgreSQL service.
+  # Uncomment with the optional PostgreSQL service when using the default named volume.
   # snap-postgres:
-  # Uncomment with the optional MySQL service.
+  # Uncomment with the optional MySQL service when using the default named volume.
   # snap-mysql:

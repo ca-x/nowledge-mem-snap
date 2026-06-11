@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Nowledge Mem Snap 是一个自托管的 Nowledge Mem 备份服务。
+Nowledge Mem Snap 是一个自托管的 [Nowledge Mem](https://mem.nowledge.co) 备份服务。
 
 它可以把每个登录用户自己的备份配置同步到 S3 兼容存储和 WebDAV。推荐 source 是 Nowledge Mem 官方 Data Transfer API 导出的可移植 ZIP；目录 source 主要用于 Docker 场景下的运维级目录快照，并且只能访问显式允许的挂载根目录。
 
