@@ -32,6 +32,20 @@ func (_c *UserCreate) SetUsername(v string) *UserCreate {
 	return _c
 }
 
+// SetEmail sets the "email" field.
+func (_c *UserCreate) SetEmail(v string) *UserCreate {
+	_c.mutation.SetEmail(v)
+	return _c
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_c *UserCreate) SetNillableEmail(v *string) *UserCreate {
+	if v != nil {
+		_c.SetEmail(*v)
+	}
+	return _c
+}
+
 // SetPasswordHash sets the "password_hash" field.
 func (_c *UserCreate) SetPasswordHash(v string) *UserCreate {
 	_c.mutation.SetPasswordHash(v)
@@ -62,6 +76,48 @@ func (_c *UserCreate) SetAvatarURL(v string) *UserCreate {
 func (_c *UserCreate) SetNillableAvatarURL(v *string) *UserCreate {
 	if v != nil {
 		_c.SetAvatarURL(*v)
+	}
+	return _c
+}
+
+// SetOidcIssuer sets the "oidc_issuer" field.
+func (_c *UserCreate) SetOidcIssuer(v string) *UserCreate {
+	_c.mutation.SetOidcIssuer(v)
+	return _c
+}
+
+// SetNillableOidcIssuer sets the "oidc_issuer" field if the given value is not nil.
+func (_c *UserCreate) SetNillableOidcIssuer(v *string) *UserCreate {
+	if v != nil {
+		_c.SetOidcIssuer(*v)
+	}
+	return _c
+}
+
+// SetOidcSubject sets the "oidc_subject" field.
+func (_c *UserCreate) SetOidcSubject(v string) *UserCreate {
+	_c.mutation.SetOidcSubject(v)
+	return _c
+}
+
+// SetNillableOidcSubject sets the "oidc_subject" field if the given value is not nil.
+func (_c *UserCreate) SetNillableOidcSubject(v *string) *UserCreate {
+	if v != nil {
+		_c.SetOidcSubject(*v)
+	}
+	return _c
+}
+
+// SetOidcEmail sets the "oidc_email" field.
+func (_c *UserCreate) SetOidcEmail(v string) *UserCreate {
+	_c.mutation.SetOidcEmail(v)
+	return _c
+}
+
+// SetNillableOidcEmail sets the "oidc_email" field if the given value is not nil.
+func (_c *UserCreate) SetNillableOidcEmail(v *string) *UserCreate {
+	if v != nil {
+		_c.SetOidcEmail(*v)
 	}
 	return _c
 }
@@ -178,6 +234,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
 		_node.Username = value
 	}
+	if value, ok := _c.mutation.Email(); ok {
+		_spec.SetField(user.FieldEmail, field.TypeString, value)
+		_node.Email = value
+	}
 	if value, ok := _c.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 		_node.PasswordHash = value
@@ -189,6 +249,18 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AvatarURL(); ok {
 		_spec.SetField(user.FieldAvatarURL, field.TypeString, value)
 		_node.AvatarURL = value
+	}
+	if value, ok := _c.mutation.OidcIssuer(); ok {
+		_spec.SetField(user.FieldOidcIssuer, field.TypeString, value)
+		_node.OidcIssuer = value
+	}
+	if value, ok := _c.mutation.OidcSubject(); ok {
+		_spec.SetField(user.FieldOidcSubject, field.TypeString, value)
+		_node.OidcSubject = value
+	}
+	if value, ok := _c.mutation.OidcEmail(); ok {
+		_spec.SetField(user.FieldOidcEmail, field.TypeString, value)
+		_node.OidcEmail = value
 	}
 	if value, ok := _c.mutation.IsAdmin(); ok {
 		_spec.SetField(user.FieldIsAdmin, field.TypeBool, value)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/mail"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ca-x/nowledge-mem-snap/internal/persist"
 	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent"
+	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/runrecord"
 	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/systemconfig"
 	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/tenantconfig"
 	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/user"
@@ -233,19 +235,61 @@ type Store struct {
 type UserRecord struct {
 	Tenant       string    `json:"tenant"`
 	Username     string    `json:"username"`
+	Email        string    `json:"email,omitempty"`
 	PasswordHash string    `json:"-"`
 	DisplayName  string    `json:"display_name"`
 	AvatarURL    string    `json:"avatar_url"`
+	OIDCIssuer   string    `json:"oidc_issuer,omitempty"`
+	OIDCSubject  string    `json:"-"`
+	OIDCEmail    string    `json:"oidc_email,omitempty"`
 	IsAdmin      bool      `json:"is_admin"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
 type Profile struct {
-	Tenant      string `json:"tenant"`
-	Username    string `json:"username"`
-	DisplayName string `json:"display_name"`
-	AvatarURL   string `json:"avatar_url"`
-	IsAdmin     bool   `json:"is_admin"`
+	Tenant      string       `json:"tenant"`
+	Username    string       `json:"username"`
+	Email       string       `json:"email,omitempty"`
+	DisplayName string       `json:"display_name"`
+	AvatarURL   string       `json:"avatar_url"`
+	IsAdmin     bool         `json:"is_admin"`
+	OIDC        OIDCIdentity `json:"oidc"`
+}
+
+type OIDCIdentity struct {
+	Linked bool   `json:"linked"`
+	Issuer string `json:"issuer,omitempty"`
+	Email  string `json:"email,omitempty"`
+}
+
+type OIDCProfile struct {
+	Issuer            string
+	Subject           string
+	Email             string
+	EmailVerified     bool
+	Username          string
+	DisplayName       string
+	AvatarURL         string
+	PreferredUsername string
+	Nickname          string
+}
+
+type UserUpdate struct {
+	Username    string
+	Email       string
+	DisplayName string
+	IsAdmin     bool
+}
+
+type AdminUser struct {
+	Tenant      string       `json:"tenant"`
+	Username    string       `json:"username"`
+	Email       string       `json:"email,omitempty"`
+	DisplayName string       `json:"display_name"`
+	AvatarURL   string       `json:"avatar_url"`
+	IsAdmin     bool         `json:"is_admin"`
+	OIDC        OIDCIdentity `json:"oidc"`
+	CreatedAt   time.Time    `json:"created_at"`
 }
 
 func NewStore(dataDir string) *Store {
@@ -317,6 +361,7 @@ func (s *Store) CreateLocalUser(username, password string, admin bool) error {
 	if tenant == "" {
 		return fmt.Errorf("username cannot produce a valid tenant key")
 	}
+	email := NormalizeEmail(username)
 	hash, err := HashPassword(password)
 	if err != nil {
 		return err
@@ -324,25 +369,90 @@ func (s *Store) CreateLocalUser(username, password string, admin bool) error {
 	ctx := context.Background()
 	existing, err := s.client.User.Query().Where(user.Username(username)).Only(ctx)
 	if ent.IsNotFound(err) {
-		err = s.client.User.Create().
+		create := s.client.User.Create().
 			SetTenant(tenant).
 			SetUsername(username).
 			SetPasswordHash(hash).
 			SetDisplayName(username).
 			SetIsAdmin(admin).
-			SetCreatedAt(time.Now().UTC()).
-			Exec(ctx)
+			SetCreatedAt(time.Now().UTC())
+		if email != "" {
+			create.SetEmail(email)
+		}
+		err = create.Exec(ctx)
 	} else if err == nil {
-		err = existing.Update().
+		update := existing.Update().
 			SetPasswordHash(hash).
-			SetIsAdmin(admin).
-			Exec(ctx)
+			SetIsAdmin(admin)
+		if email != "" {
+			update.SetEmail(email)
+		}
+		err = update.Exec(ctx)
 	}
 	if err != nil {
 		return err
 	}
 	_, _ = s.LoadUser(tenant)
 	return nil
+}
+
+func (s *Store) CreateUser(username, password, displayName, email string, admin bool) (AdminUser, error) {
+	username = strings.TrimSpace(username)
+	displayName = strings.TrimSpace(displayName)
+	email = strings.TrimSpace(email)
+	if username == "" {
+		return AdminUser{}, fmt.Errorf("username is required")
+	}
+	if password == "" {
+		return AdminUser{}, fmt.Errorf("password is required")
+	}
+	tenant := TenantKey(username)
+	if tenant == "" {
+		return AdminUser{}, fmt.Errorf("username cannot produce a valid tenant key")
+	}
+	if displayName == "" {
+		displayName = username
+	}
+	normalizedEmail, err := NormalizeOptionalEmail(email)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	hash, err := HashPassword(password)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	ctx := context.Background()
+	if exists, err := s.client.User.Query().Where(user.Username(username)).Exist(ctx); err != nil {
+		return AdminUser{}, err
+	} else if exists {
+		return AdminUser{}, fmt.Errorf("username %q already exists", username)
+	}
+	if exists, err := s.client.User.Query().Where(user.Tenant(tenant)).Exist(ctx); err != nil {
+		return AdminUser{}, err
+	} else if exists {
+		return AdminUser{}, fmt.Errorf("tenant %q already exists", tenant)
+	}
+	if err := s.ensureUniqueEmail(ctx, normalizedEmail, ""); err != nil {
+		return AdminUser{}, err
+	}
+	create := s.client.User.Create().
+		SetTenant(tenant).
+		SetUsername(username).
+		SetPasswordHash(hash).
+		SetDisplayName(displayName).
+		SetIsAdmin(admin).
+		SetCreatedAt(time.Now().UTC())
+	if normalizedEmail != "" {
+		create.SetEmail(normalizedEmail)
+	}
+	row, err := create.Save(ctx)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	if _, err := s.LoadUser(tenant); err != nil {
+		return AdminUser{}, err
+	}
+	return adminUserFromEnt(row), nil
 }
 
 func (s *Store) VerifyLocalUser(username, password string) (UserRecord, bool, error) {
@@ -360,70 +470,148 @@ func (s *Store) VerifyLocalUser(username, password string) (UserRecord, bool, er
 	if err != nil {
 		return UserRecord{}, false, err
 	}
-	rec := UserRecord{
-		Tenant:       row.Tenant,
-		Username:     row.Username,
-		PasswordHash: row.PasswordHash,
-		DisplayName:  row.DisplayName,
-		AvatarURL:    row.AvatarURL,
-		IsAdmin:      row.IsAdmin,
-		CreatedAt:    row.CreatedAt,
-	}
-	return rec, ok, nil
+	return userRecordFromEnt(row), ok, nil
 }
 
 func (s *Store) UpsertExternalUser(tenant, username, displayName, avatarURL string) (UserRecord, error) {
-	tenant = TenantKey(tenant)
-	username = strings.TrimSpace(username)
-	if username == "" {
-		username = tenant
+	return s.UpsertOIDCUser(OIDCProfile{
+		Issuer:      "legacy",
+		Subject:     tenant,
+		Email:       username,
+		Username:    username,
+		DisplayName: displayName,
+		AvatarURL:   avatarURL,
+	})
+}
+
+func (s *Store) UpsertOIDCUser(profile OIDCProfile) (UserRecord, error) {
+	profile = normalizeOIDCProfile(profile)
+	if profile.Issuer == "" {
+		return UserRecord{}, fmt.Errorf("oidc issuer is required")
 	}
-	if tenant == "" {
-		return UserRecord{}, fmt.Errorf("tenant is required")
-	}
-	if strings.TrimSpace(displayName) == "" {
-		displayName = username
-	}
-	if err := ValidateAvatarURL(avatarURL); err != nil {
-		avatarURL = ""
+	if profile.Subject == "" {
+		return UserRecord{}, fmt.Errorf("oidc subject is required")
 	}
 	ctx := context.Background()
-	row, err := s.client.User.Query().Where(user.Tenant(tenant)).Only(ctx)
+	row, err := s.client.User.Query().Where(user.OidcIssuer(profile.Issuer), user.OidcSubject(profile.Subject)).Only(ctx)
 	if ent.IsNotFound(err) {
-		err = s.client.User.Create().
-			SetTenant(tenant).
-			SetUsername(username).
-			SetPasswordHash("external:oidc").
-			SetDisplayName(displayName).
-			SetAvatarURL(strings.TrimSpace(avatarURL)).
-			SetIsAdmin(false).
-			SetCreatedAt(time.Now().UTC()).
-			Exec(ctx)
+		row, err = s.linkOIDCByVerifiedEmail(ctx, profile)
+		if err == nil && row != nil {
+			return userRecordFromEnt(row), nil
+		}
 		if err != nil {
 			return UserRecord{}, err
 		}
-		row, err = s.client.User.Query().Where(user.Tenant(tenant)).Only(ctx)
+		tenant, username, err := s.uniqueOIDCUserIdentity(ctx, profile)
+		if err != nil {
+			return UserRecord{}, err
+		}
+		create := s.client.User.Create().
+			SetTenant(tenant).
+			SetUsername(username).
+			SetPasswordHash("external:oidc").
+			SetDisplayName(defaultString(profile.DisplayName, username)).
+			SetAvatarURL(profile.AvatarURL).
+			SetOidcIssuer(profile.Issuer).
+			SetOidcSubject(profile.Subject).
+			SetOidcEmail(profile.Email).
+			SetIsAdmin(false).
+			SetCreatedAt(time.Now().UTC())
+		if ok, err := s.emailIsUnique(ctx, profile.Email, ""); err != nil {
+			return UserRecord{}, err
+		} else if profile.EmailVerified && profile.Email != "" && ok {
+			create.SetEmail(profile.Email)
+		}
+		err = create.Exec(ctx)
+		if err != nil {
+			return UserRecord{}, err
+		}
+		row, err = s.client.User.Query().Where(user.OidcIssuer(profile.Issuer), user.OidcSubject(profile.Subject)).Only(ctx)
 	} else if err == nil {
-		err = row.Update().
-			SetDisplayName(displayName).
-			SetAvatarURL(strings.TrimSpace(avatarURL)).
-			Exec(ctx)
+		update := row.Update().SetOidcEmail(profile.Email)
+		if ok, err := s.emailIsUnique(ctx, profile.Email, row.Tenant); err != nil {
+			return UserRecord{}, err
+		} else if profile.EmailVerified && profile.Email != "" && ok {
+			update.SetEmail(profile.Email)
+		}
+		if profile.DisplayName != "" {
+			update.SetDisplayName(profile.DisplayName)
+		}
+		if profile.AvatarURL != "" {
+			update.SetAvatarURL(profile.AvatarURL)
+		}
+		err = update.Exec(ctx)
 		if err == nil {
-			row, err = s.client.User.Query().Where(user.Tenant(tenant)).Only(ctx)
+			row, err = s.client.User.Query().Where(user.OidcIssuer(profile.Issuer), user.OidcSubject(profile.Subject)).Only(ctx)
 		}
 	}
 	if err != nil {
 		return UserRecord{}, err
 	}
-	return UserRecord{
-		Tenant:       row.Tenant,
-		Username:     row.Username,
-		PasswordHash: row.PasswordHash,
-		DisplayName:  row.DisplayName,
-		AvatarURL:    row.AvatarURL,
-		IsAdmin:      row.IsAdmin,
-		CreatedAt:    row.CreatedAt,
-	}, nil
+	return userRecordFromEnt(row), nil
+}
+
+func (s *Store) LinkOIDCIdentity(tenant string, profile OIDCProfile) (Profile, error) {
+	profile = normalizeOIDCProfile(profile)
+	if profile.Issuer == "" {
+		return Profile{}, fmt.Errorf("oidc issuer is required")
+	}
+	if profile.Subject == "" {
+		return Profile{}, fmt.Errorf("oidc subject is required")
+	}
+	ctx := context.Background()
+	tenant = TenantKey(tenant)
+	row, err := s.client.User.Query().Where(user.Tenant(tenant)).Only(ctx)
+	if err != nil {
+		return Profile{}, err
+	}
+	existing, err := s.client.User.Query().Where(user.OidcIssuer(profile.Issuer), user.OidcSubject(profile.Subject)).Only(ctx)
+	if err == nil && existing.Tenant != row.Tenant {
+		return Profile{}, fmt.Errorf("oidc account is already linked to another user")
+	}
+	if err != nil && !ent.IsNotFound(err) {
+		return Profile{}, err
+	}
+	update := row.Update().
+		SetOidcIssuer(profile.Issuer).
+		SetOidcSubject(profile.Subject).
+		SetOidcEmail(profile.Email)
+	if profile.EmailVerified && profile.Email != "" {
+		if err := s.ensureUniqueEmail(ctx, profile.Email, row.Tenant); err != nil {
+			return Profile{}, err
+		}
+		update.SetEmail(profile.Email)
+	}
+	if profile.DisplayName != "" && strings.TrimSpace(row.DisplayName) == "" {
+		update.SetDisplayName(profile.DisplayName)
+	}
+	if profile.AvatarURL != "" && strings.TrimSpace(row.AvatarURL) == "" {
+		update.SetAvatarURL(profile.AvatarURL)
+	}
+	if err := update.Exec(ctx); err != nil {
+		return Profile{}, err
+	}
+	row, err = s.client.User.Query().Where(user.Tenant(tenant)).Only(ctx)
+	if err != nil {
+		return Profile{}, err
+	}
+	return profileFromUser(row), nil
+}
+
+func (s *Store) OIDCUser(issuer, subject string) (UserRecord, bool, error) {
+	issuer = strings.TrimSpace(issuer)
+	subject = strings.TrimSpace(subject)
+	if issuer == "" || subject == "" {
+		return UserRecord{}, false, nil
+	}
+	row, err := s.client.User.Query().Where(user.OidcIssuer(issuer), user.OidcSubject(subject)).Only(context.Background())
+	if ent.IsNotFound(err) {
+		return UserRecord{}, false, nil
+	}
+	if err != nil {
+		return UserRecord{}, false, err
+	}
+	return userRecordFromEnt(row), true, nil
 }
 
 func (s *Store) Profile(tenant string) (Profile, error) {
@@ -434,11 +622,16 @@ func (s *Store) Profile(tenant string) (Profile, error) {
 	return profileFromUser(row), nil
 }
 
-func (s *Store) UpdateProfile(tenant, displayName, avatarURL string) (Profile, error) {
+func (s *Store) UpdateProfile(tenant, displayName, email, avatarURL string) (Profile, error) {
 	displayName = strings.TrimSpace(displayName)
+	email = strings.TrimSpace(email)
 	avatarURL = strings.TrimSpace(avatarURL)
 	if displayName == "" {
 		return Profile{}, fmt.Errorf("display name is required")
+	}
+	normalizedEmail, err := NormalizeOptionalEmail(email)
+	if err != nil {
+		return Profile{}, err
 	}
 	if err := ValidateAvatarURL(avatarURL); err != nil {
 		return Profile{}, err
@@ -448,10 +641,18 @@ func (s *Store) UpdateProfile(tenant, displayName, avatarURL string) (Profile, e
 	if err != nil {
 		return Profile{}, err
 	}
-	if err := row.Update().
+	if err := s.ensureUniqueEmail(ctx, normalizedEmail, row.Tenant); err != nil {
+		return Profile{}, err
+	}
+	update := row.Update().
 		SetDisplayName(displayName).
-		SetAvatarURL(avatarURL).
-		Exec(ctx); err != nil {
+		SetAvatarURL(avatarURL)
+	if normalizedEmail == "" {
+		update.ClearEmail()
+	} else {
+		update.SetEmail(normalizedEmail)
+	}
+	if err := update.Exec(ctx); err != nil {
 		return Profile{}, err
 	}
 	row, err = s.client.User.Query().Where(user.Tenant(TenantKey(tenant))).Only(ctx)
@@ -459,6 +660,302 @@ func (s *Store) UpdateProfile(tenant, displayName, avatarURL string) (Profile, e
 		return Profile{}, err
 	}
 	return profileFromUser(row), nil
+}
+
+func (s *Store) ListAdminUsers() ([]AdminUser, error) {
+	rows, err := s.client.User.Query().Order(ent.Asc(user.FieldUsername)).All(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AdminUser, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, adminUserFromEnt(row))
+	}
+	return out, nil
+}
+
+func (s *Store) UpdateUser(tenant string, update UserUpdate) (AdminUser, error) {
+	tenant = TenantKey(tenant)
+	update.Username = strings.TrimSpace(update.Username)
+	update.Email = strings.TrimSpace(update.Email)
+	update.DisplayName = strings.TrimSpace(update.DisplayName)
+	if tenant == "" {
+		return AdminUser{}, fmt.Errorf("tenant is required")
+	}
+	if update.Username == "" {
+		return AdminUser{}, fmt.Errorf("username is required")
+	}
+	if update.DisplayName == "" {
+		update.DisplayName = update.Username
+	}
+	normalizedEmail, err := NormalizeOptionalEmail(update.Email)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	newTenant := TenantKey(update.Username)
+	if newTenant == "" {
+		return AdminUser{}, fmt.Errorf("username cannot produce a valid tenant key")
+	}
+	ctx := context.Background()
+	row, err := s.client.User.Query().Where(user.Tenant(tenant)).Only(ctx)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	if row.Username != update.Username {
+		exists, err := s.client.User.Query().Where(user.Username(update.Username)).Exist(ctx)
+		if err != nil {
+			return AdminUser{}, err
+		}
+		if exists {
+			return AdminUser{}, fmt.Errorf("username %q already exists", update.Username)
+		}
+	}
+	if !update.IsAdmin && row.IsAdmin {
+		admins, err := s.adminCountExcept(ctx, tenant)
+		if err != nil {
+			return AdminUser{}, err
+		}
+		if admins == 0 {
+			return AdminUser{}, fmt.Errorf("cannot remove the last administrator")
+		}
+	}
+	if newTenant != tenant {
+		if exists, err := s.client.User.Query().Where(user.Tenant(newTenant)).Exist(ctx); err != nil {
+			return AdminUser{}, err
+		} else if exists {
+			return AdminUser{}, fmt.Errorf("tenant %q already exists", newTenant)
+		}
+		if exists, err := s.client.TenantConfig.Query().Where(tenantconfig.Tenant(newTenant)).Exist(ctx); err != nil {
+			return AdminUser{}, err
+		} else if exists {
+			return AdminUser{}, fmt.Errorf("tenant config %q already exists", newTenant)
+		}
+	}
+	if err := s.ensureUniqueEmail(ctx, normalizedEmail, tenant); err != nil {
+		return AdminUser{}, err
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	userUpdate := tx.User.UpdateOneID(row.ID).
+		SetTenant(newTenant).
+		SetUsername(update.Username).
+		SetDisplayName(update.DisplayName).
+		SetIsAdmin(update.IsAdmin)
+	if normalizedEmail == "" {
+		userUpdate.ClearEmail()
+	} else {
+		userUpdate.SetEmail(normalizedEmail)
+	}
+	updated, err := userUpdate.Save(ctx)
+	if err != nil {
+		_ = tx.Rollback()
+		return AdminUser{}, err
+	}
+	if newTenant != tenant {
+		if err := renameTenantConfig(ctx, tx, tenant, newTenant); err != nil {
+			_ = tx.Rollback()
+			return AdminUser{}, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return AdminUser{}, err
+	}
+	updated, err = s.client.User.Query().Where(user.Tenant(updated.Tenant)).Only(ctx)
+	if err != nil {
+		return AdminUser{}, err
+	}
+	return adminUserFromEnt(updated), nil
+}
+
+func (s *Store) ResetUserPassword(tenant, password string) error {
+	tenant = TenantKey(tenant)
+	if tenant == "" {
+		return fmt.Errorf("tenant is required")
+	}
+	if password == "" {
+		return fmt.Errorf("password is required")
+	}
+	hash, err := HashPassword(password)
+	if err != nil {
+		return err
+	}
+	row, err := s.client.User.Query().Where(user.Tenant(tenant)).Only(context.Background())
+	if err != nil {
+		return err
+	}
+	return row.Update().SetPasswordHash(hash).Exec(context.Background())
+}
+
+func (s *Store) DeleteUser(tenant string) error {
+	tenant = TenantKey(tenant)
+	if tenant == "" {
+		return fmt.Errorf("tenant is required")
+	}
+	ctx := context.Background()
+	row, err := s.client.User.Query().Where(user.Tenant(tenant)).Only(ctx)
+	if err != nil {
+		return err
+	}
+	if row.IsAdmin {
+		admins, err := s.adminCountExcept(ctx, tenant)
+		if err != nil {
+			return err
+		}
+		if admins == 0 {
+			return fmt.Errorf("cannot delete the last administrator")
+		}
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	if err := tx.User.DeleteOneID(row.ID).Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.TenantConfig.Delete().Where(tenantconfig.Tenant(tenant)).Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.RunRecord.Delete().Where(runrecord.Tenant(tenant)).Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) adminCountExcept(ctx context.Context, tenant string) (int, error) {
+	query := s.client.User.Query().Where(user.IsAdmin(true))
+	if tenant = TenantKey(tenant); tenant != "" {
+		query = query.Where(user.TenantNEQ(tenant))
+	}
+	return query.Count(ctx)
+}
+
+func (s *Store) ensureUniqueEmail(ctx context.Context, email, exceptTenant string) error {
+	ok, err := s.emailIsUnique(ctx, email, exceptTenant)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("email %q already exists", NormalizeEmail(email))
+	}
+	return nil
+}
+
+func (s *Store) emailIsUnique(ctx context.Context, email, exceptTenant string) (bool, error) {
+	email = NormalizeEmail(email)
+	if email == "" {
+		return true, nil
+	}
+	query := s.client.User.Query().Where(user.EmailEqualFold(email))
+	if exceptTenant = TenantKey(exceptTenant); exceptTenant != "" {
+		query = query.Where(user.TenantNEQ(exceptTenant))
+	}
+	exists, err := query.Exist(ctx)
+	if err != nil {
+		return false, err
+	}
+	return !exists, nil
+}
+
+func (s *Store) linkOIDCByVerifiedEmail(ctx context.Context, profile OIDCProfile) (*ent.User, error) {
+	if !profile.EmailVerified || profile.Email == "" {
+		return nil, nil
+	}
+	rows, err := s.client.User.Query().Where(user.EmailEqualFold(profile.Email)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) != 1 {
+		return nil, nil
+	}
+	candidate := rows[0]
+	if strings.TrimSpace(candidate.OidcIssuer) != "" || strings.TrimSpace(candidate.OidcSubject) != "" {
+		return nil, nil
+	}
+	update := candidate.Update().
+		SetOidcIssuer(profile.Issuer).
+		SetOidcSubject(profile.Subject).
+		SetOidcEmail(profile.Email).
+		SetEmail(profile.Email)
+	if profile.DisplayName != "" && strings.TrimSpace(candidate.DisplayName) == "" {
+		update.SetDisplayName(profile.DisplayName)
+	}
+	if profile.AvatarURL != "" && strings.TrimSpace(candidate.AvatarURL) == "" {
+		update.SetAvatarURL(profile.AvatarURL)
+	}
+	if err := update.Exec(ctx); err != nil {
+		return nil, err
+	}
+	return s.client.User.Query().Where(user.Tenant(candidate.Tenant)).Only(ctx)
+}
+
+func renameTenantConfig(ctx context.Context, tx *ent.Tx, oldTenant, newTenant string) error {
+	row, err := tx.TenantConfig.Query().Where(tenantconfig.Tenant(oldTenant)).Only(ctx)
+	if ent.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := row.Update().SetTenant(newTenant).Exec(ctx); err != nil {
+		return err
+	}
+	_, err = tx.RunRecord.Update().Where(runrecord.Tenant(oldTenant)).SetTenant(newTenant).Save(ctx)
+	return err
+}
+
+func (s *Store) uniqueOIDCUserIdentity(ctx context.Context, profile OIDCProfile) (tenant string, username string, err error) {
+	baseTenant := TenantKey(profile.Subject)
+	if baseTenant == "" {
+		baseTenant = TenantKey(profile.Email)
+	}
+	if baseTenant == "" {
+		baseTenant = "oidc-user"
+	}
+	baseUsername := strings.TrimSpace(profile.Username)
+	if baseUsername == "" {
+		baseUsername = baseTenant
+	}
+	for i := 0; i < 100; i++ {
+		candidateTenant := baseTenant
+		candidateUsername := baseUsername
+		if i > 0 {
+			candidateTenant = fmt.Sprintf("%s-%d", trimTenantForSuffix(baseTenant, i), i)
+			candidateUsername = fmt.Sprintf("%s-%d", strings.TrimSpace(baseUsername), i)
+		}
+		tenantExists, err := s.client.User.Query().Where(user.Tenant(candidateTenant)).Exist(ctx)
+		if err != nil {
+			return "", "", err
+		}
+		if tenantExists {
+			continue
+		}
+		usernameExists, err := s.client.User.Query().Where(user.Username(candidateUsername)).Exist(ctx)
+		if err != nil {
+			return "", "", err
+		}
+		if usernameExists {
+			continue
+		}
+		return candidateTenant, candidateUsername, nil
+	}
+	return "", "", fmt.Errorf("failed to allocate oidc user identity")
+}
+
+func trimTenantForSuffix(tenant string, suffix int) string {
+	s := strconv.Itoa(suffix)
+	limit := 64 - len(s) - 1
+	if limit < 1 {
+		return tenant
+	}
+	if len(tenant) > limit {
+		return strings.Trim(tenant[:limit], "-_")
+	}
+	return tenant
 }
 
 func ValidateAvatarURL(value string) error {
@@ -482,6 +979,30 @@ func ValidateAvatarURL(value string) error {
 	return fmt.Errorf("avatar must be an http(s) URL, a relative path, or a base64 image data URL")
 }
 
+func NormalizeEmail(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	addr, err := mail.ParseAddress(value)
+	if err != nil || addr.Address != value {
+		return ""
+	}
+	return addr.Address
+}
+
+func NormalizeOptionalEmail(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	normalized := NormalizeEmail(value)
+	if normalized == "" {
+		return "", fmt.Errorf("email is invalid")
+	}
+	return normalized, nil
+}
+
 func profileFromUser(row *ent.User) Profile {
 	displayName := row.DisplayName
 	if strings.TrimSpace(displayName) == "" {
@@ -490,10 +1011,68 @@ func profileFromUser(row *ent.User) Profile {
 	return Profile{
 		Tenant:      row.Tenant,
 		Username:    row.Username,
+		Email:       row.Email,
 		DisplayName: displayName,
 		AvatarURL:   row.AvatarURL,
 		IsAdmin:     row.IsAdmin,
+		OIDC: OIDCIdentity{
+			Linked: strings.TrimSpace(row.OidcIssuer) != "" && strings.TrimSpace(row.OidcSubject) != "",
+			Issuer: row.OidcIssuer,
+			Email:  row.OidcEmail,
+		},
 	}
+}
+
+func userRecordFromEnt(row *ent.User) UserRecord {
+	return UserRecord{
+		Tenant:       row.Tenant,
+		Username:     row.Username,
+		Email:        row.Email,
+		PasswordHash: row.PasswordHash,
+		DisplayName:  row.DisplayName,
+		AvatarURL:    row.AvatarURL,
+		OIDCIssuer:   row.OidcIssuer,
+		OIDCSubject:  row.OidcSubject,
+		OIDCEmail:    row.OidcEmail,
+		IsAdmin:      row.IsAdmin,
+		CreatedAt:    row.CreatedAt,
+	}
+}
+
+func adminUserFromEnt(row *ent.User) AdminUser {
+	profile := profileFromUser(row)
+	return AdminUser{
+		Tenant:      profile.Tenant,
+		Username:    profile.Username,
+		Email:       profile.Email,
+		DisplayName: profile.DisplayName,
+		AvatarURL:   profile.AvatarURL,
+		IsAdmin:     profile.IsAdmin,
+		OIDC:        profile.OIDC,
+		CreatedAt:   row.CreatedAt,
+	}
+}
+
+func normalizeOIDCProfile(profile OIDCProfile) OIDCProfile {
+	profile.Issuer = strings.TrimSpace(profile.Issuer)
+	profile.Subject = strings.TrimSpace(profile.Subject)
+	profile.Email = NormalizeEmail(profile.Email)
+	profile.Username = strings.TrimSpace(firstNonEmpty(profile.Username, profile.PreferredUsername, profile.Email, profile.Subject))
+	profile.DisplayName = strings.TrimSpace(firstNonEmpty(profile.DisplayName, profile.Nickname, profile.PreferredUsername, profile.Username, profile.Email))
+	profile.AvatarURL = strings.TrimSpace(profile.AvatarURL)
+	if err := ValidateAvatarURL(profile.AvatarURL); err != nil {
+		profile.AvatarURL = ""
+	}
+	return profile
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Store) Load() (Config, error) {

@@ -5,12 +5,14 @@ import { useI18n } from '../i18n';
 import { Avatar, Field, ModalFooter } from '../components/ui';
 import type { Profile } from '../types';
 
-export function ProfileModal({ open, profile, saving, onCancel, onSave }: {
+export function ProfileModal({ open, profile, saving, oidcEnabled, onCancel, onSave, onLinkOIDC }: {
   open: boolean;
   profile: Profile;
   saving: boolean;
+  oidcEnabled: boolean;
   onCancel: () => void;
   onSave: (profile: Profile) => Promise<boolean>;
+  onLinkOIDC: () => void;
 }) {
   const { t } = useI18n();
   const [draftProfile, setDraftProfile] = useState(profile);
@@ -52,9 +54,21 @@ export function ProfileModal({ open, profile, saving, onCancel, onSave }: {
         <Field label={t('nickname')}>
           <Input value={draftProfile.display_name} onChange={(e) => setDraftProfile({ ...draftProfile, display_name: e.target.value })} allowClear />
         </Field>
+        <Field label={t('email')} help={t('emailAutoLinkTip')}>
+          <Input value={draftProfile.email ?? ''} onChange={(e) => setDraftProfile({ ...draftProfile, email: e.target.value })} allowClear />
+        </Field>
         <Field label={t('avatarUrlOrBase64')}>
           <Input value={draftProfile.avatar_url} onChange={(e) => setDraftProfile({ ...draftProfile, avatar_url: e.target.value })} allowClear />
         </Field>
+        {oidcEnabled && (
+          <div className="oidc-box">
+            <div>
+              <strong>{t('oidcAccount')}</strong>
+              <p>{profile.oidc?.linked ? `${t('oidcLinked')}${profile.oidc.email ? ` · ${profile.oidc.email}` : ''}` : t('oidcNotLinked')}</p>
+            </div>
+            <Button type="default" onClick={onLinkOIDC}>{profile.oidc?.linked ? t('rebindOidc') : t('bindOidc')}</Button>
+          </div>
+        )}
       </div>
     </Modal>
   );

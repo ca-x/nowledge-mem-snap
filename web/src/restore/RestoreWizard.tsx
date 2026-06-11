@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, UploadCloud } from 'lucide-react';
 import { api } from '../api';
 import { Panel } from '../components/ui';
 import { useI18n } from '../i18n';
-import type { RestoreJob, RestoreObject } from '../types';
+import type { RestoreDirectory, RestoreJob, RestoreObject } from '../types';
 import { defaultRestoreImportOptions } from './restoreDefaults';
 import { RestoreDestinationStep } from './RestoreDestinationStep';
 import { RestoreObjectStep } from './RestoreObjectStep';
@@ -20,6 +20,7 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
   const { t } = useI18n();
   const [activeIndex, setActiveIndex] = useState(0);
   const [maxStep, setMaxStep] = useState(0);
+  const [directories, setDirectories] = useState<RestoreDirectory[]>([]);
   const [objects, setObjects] = useState<RestoreObject[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
@@ -29,6 +30,7 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
   const [draft, setDraft] = useState<RestoreDraft>({
     targetKey: targets[0]?.key ?? '',
     prefix: '',
+    directory: '',
     objectName: '',
     encryptionPassword: '',
     destinationSourceKey: sources[0]?.key ?? '',
@@ -52,16 +54,18 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
 
   const updateDraft = (patch: Partial<RestoreDraft>) => {
     const targetChanged = patch.targetKey !== undefined && patch.targetKey !== draft.targetKey;
-    if (targetChanged) {
+    const prefixChanged = patch.prefix !== undefined && patch.prefix !== draft.prefix;
+    if (targetChanged || prefixChanged) {
+      setDirectories([]);
       setObjects([]);
       setScanError('');
     }
     setDraft((current) => {
       const next = { ...current, ...patch };
-      if (targetChanged) {
-        next.objectName = '';
-        next.encryptionPassword = '';
-      }
+      if (targetChanged) next.prefix = '';
+      if (targetChanged || prefixChanged) next.directory = '';
+      if (targetChanged || prefixChanged) next.objectName = '';
+      if (targetChanged || prefixChanged) next.encryptionPassword = '';
       if (patch.importOptions && !isDangerousMode(patch.importOptions.mode ?? '')) {
         next.dangerousModeConfirmed = false;
       }
@@ -78,19 +82,50 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
     setMaxStep((value) => Math.max(value, next));
   };
 
-  const scanObjects = async () => {
+  const scanDirectories = async () => {
+    setScanError('');
+    setScanning(true);
+    try {
+      const response = await api<{ directories: RestoreDirectory[]; objects: RestoreObject[] }>('/api/restore/browse', {
+        method: 'POST',
+        body: JSON.stringify({ target_key: draft.targetKey, prefix: draft.prefix })
+      });
+      const nextDirectories = response.directories ?? [];
+      const rootObjects = response.objects ?? [];
+      setDirectories(nextDirectories);
+      if (nextDirectories.length > 0) {
+        setObjects([]);
+        updateDraft({ directory: '', objectName: '', encryptionPassword: '' });
+      } else {
+        setObjects(rootObjects);
+        updateDraft({ directory: '', objectName: rootObjects[0]?.name ?? '' });
+        if (rootObjects.length === 0) {
+          setScanError(t('restoreNoDirectoriesFound'));
+        }
+      }
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : t('restoreScanFailed'));
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const selectDirectory = async (directory: string) => {
+    updateDraft({ directory, objectName: '', encryptionPassword: '' });
+    if (!directory) {
+      setObjects([]);
+      return;
+    }
     setScanError('');
     setScanning(true);
     try {
       const response = await api<{ objects: RestoreObject[] }>('/api/restore/objects', {
         method: 'POST',
-        body: JSON.stringify({ target_key: draft.targetKey, prefix: draft.prefix })
+        body: JSON.stringify({ target_key: draft.targetKey, prefix: directory })
       });
       const nextObjects = response.objects ?? [];
       setObjects(nextObjects);
-      if (!nextObjects.some((object) => object.name === draft.objectName) && nextObjects[0]) {
-        updateDraft({ objectName: nextObjects[0].name });
-      }
+      updateDraft({ objectName: nextObjects[0]?.name ?? '' });
       if (nextObjects.length === 0) {
         setScanError(t('restoreNoObjectsFound'));
       }
@@ -100,6 +135,13 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
       setScanning(false);
     }
   };
+
+  useEffect(() => {
+    if (activeStep !== 'object' || !draft.targetKey || directories.length > 0 || objects.length > 0 || scanning) {
+      return;
+    }
+    scanDirectories();
+  }, [activeStep, draft.targetKey]);
 
   const fetchJob = async (id: string) => {
     const next = await api<RestoreJob>(`/api/restore/jobs/${encodeURIComponent(id)}`);
@@ -143,6 +185,7 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
     setActiveIndex(0);
     setMaxStep(0);
     setObjects([]);
+    setDirectories([]);
     setScanError('');
     setJob(null);
     setJobError('');
@@ -150,6 +193,7 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
     setDraft({
       targetKey: targets[0]?.key ?? '',
       prefix: '',
+      directory: '',
       objectName: '',
       encryptionPassword: '',
       destinationSourceKey: sources[0]?.key ?? '',
@@ -168,13 +212,15 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
             {activeStep === 'object' && (
               <RestoreObjectStep
                 draft={draft}
+                directories={directories}
                 objects={objects}
                 selectedObject={selectedObject}
                 locale={locale}
                 scanning={scanning}
                 scanError={scanError}
                 onDraft={updateDraft}
-                onScan={scanObjects}
+                onScan={scanDirectories}
+                onSelectDirectory={selectDirectory}
               />
             )}
             {activeStep === 'destination' && <RestoreDestinationStep draft={draft} sources={sources} onDraft={updateDraft} />}

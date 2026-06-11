@@ -53,7 +53,18 @@ type oidcState struct {
 	State  string `json:"state"`
 	Nonce  string `json:"nonce"`
 	Next   string `json:"next"`
+	Mode   string `json:"mode,omitempty"`
 	Expiry int64  `json:"exp"`
+}
+
+type oidcClaims struct {
+	Email             string `json:"email"`
+	EmailVerified     bool   `json:"email_verified"`
+	Subject           string `json:"sub"`
+	Name              string `json:"name"`
+	Nickname          string `json:"nickname"`
+	PreferredUsername string `json:"preferred_username"`
+	Picture           string `json:"picture"`
 }
 
 func NewAuth(ctx context.Context, cfg config.AuthConfig, store *config.Store, basePath string, port int) (*Auth, error) {
@@ -166,12 +177,23 @@ func (a *Auth) StartOIDC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := sanitizeNext(r.URL.Query().Get("next"), a.basePath)
+	mode := strings.TrimSpace(r.URL.Query().Get("mode"))
+	if mode != "link" {
+		mode = "login"
+	}
+	if mode == "link" {
+		if _, ok := a.Session(r); !ok {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+	}
 	state := randomToken()
 	nonce := randomToken()
 	encoded, err := a.signOIDCState(oidcState{
 		State:  state,
 		Nonce:  nonce,
 		Next:   next,
+		Mode:   mode,
 		Expiry: time.Now().Add(10 * time.Minute).Unix(),
 	})
 	if err != nil {
@@ -227,23 +249,49 @@ func (a *Auth) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "OIDC nonce mismatch")
 		return
 	}
-	var claims struct {
-		Email         string `json:"email"`
-		EmailVerified bool   `json:"email_verified"`
-		Subject       string `json:"sub"`
-		Name          string `json:"name"`
-		Picture       string `json:"picture"`
-	}
+	var claims oidcClaims
 	if err := idToken.Claims(&claims); err != nil {
 		writeError(w, http.StatusUnauthorized, "OIDC claims invalid")
 		return
 	}
+	claims = a.mergeUserInfoClaims(r.Context(), oauth2Token, claims)
 	if !a.emailAllowed(claims.Email) {
 		writeError(w, http.StatusForbidden, "OIDC user is not allowed")
 		return
 	}
-	tenant := tenantFromIdentity(claims.Subject, claims.Email)
-	user, err := a.store.UpsertExternalUser(tenant, defaultString(claims.Email, claims.Subject), defaultString(claims.Name, claims.Email), claims.Picture)
+	profile := config.OIDCProfile{
+		Issuer:            a.oidc.cfg.IssuerURL,
+		Subject:           claims.Subject,
+		Email:             claims.Email,
+		EmailVerified:     claims.EmailVerified,
+		Username:          defaultString(claims.PreferredUsername, claims.Email),
+		DisplayName:       defaultString(claims.Name, claims.Nickname),
+		AvatarURL:         claims.Picture,
+		PreferredUsername: claims.PreferredUsername,
+		Nickname:          claims.Nickname,
+	}
+	if state.Mode == "link" {
+		session, ok := a.Session(r)
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		linked, err := a.store.LinkOIDCIdentity(session.Tenant, profile)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		a.setSession(w, sessionClaims{
+			Subject: linked.Username,
+			Email:   claims.Email,
+			Tenant:  linked.Tenant,
+			Expiry:  time.Now().Add(24 * time.Hour).Unix(),
+		})
+		a.clearOIDCCookie(w)
+		http.Redirect(w, r, a.withBase(sanitizeNext(state.Next, a.basePath)), http.StatusFound)
+		return
+	}
+	user, err := a.store.UpsertOIDCUser(profile)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to prepare OIDC user")
 		return
@@ -254,14 +302,7 @@ func (a *Auth) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 		Tenant:  user.Tenant,
 		Expiry:  time.Now().Add(24 * time.Hour).Unix(),
 	})
-	http.SetCookie(w, &http.Cookie{
-		Name:     oidcCookie,
-		Value:    "",
-		Path:     a.cookiePath,
-		MaxAge:   -1,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+	a.clearOIDCCookie(w)
 	http.Redirect(w, r, a.withBase(sanitizeNext(state.Next, a.basePath)), http.StatusFound)
 }
 
@@ -306,6 +347,17 @@ func (a *Auth) setSession(w http.ResponseWriter, claims sessionClaims) {
 		Value:    value,
 		Path:     a.cookiePath,
 		MaxAge:   int(time.Until(time.Unix(claims.Expiry, 0)).Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func (a *Auth) clearOIDCCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     oidcCookie,
+		Value:    "",
+		Path:     a.cookiePath,
+		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -368,6 +420,30 @@ func (a *Auth) verifyJSON(value string, dst any) error {
 	return json.Unmarshal(data, dst)
 }
 
+func (a *Auth) mergeUserInfoClaims(ctx context.Context, token *oauth2.Token, claims oidcClaims) oidcClaims {
+	if a.oidc == nil || token == nil {
+		return claims
+	}
+	userInfo, err := a.oidc.provider.UserInfo(ctx, oauth2.StaticTokenSource(token))
+	if err != nil {
+		return claims
+	}
+	var extra oidcClaims
+	if err := userInfo.Claims(&extra); err != nil {
+		return claims
+	}
+	claims.Email = defaultString(claims.Email, extra.Email)
+	claims.Subject = defaultString(claims.Subject, extra.Subject)
+	claims.Name = defaultString(claims.Name, extra.Name)
+	claims.Nickname = defaultString(claims.Nickname, extra.Nickname)
+	claims.PreferredUsername = defaultString(claims.PreferredUsername, extra.PreferredUsername)
+	claims.Picture = defaultString(claims.Picture, extra.Picture)
+	if !claims.EmailVerified {
+		claims.EmailVerified = extra.EmailVerified
+	}
+	return claims
+}
+
 func (a *Auth) emailAllowed(email string) bool {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if len(a.oidc.cfg.AllowedEmails) == 0 && len(a.oidc.cfg.AllowedDomains) == 0 {
@@ -396,16 +472,6 @@ func randomToken() string {
 		return hex.EncodeToString([]byte(time.Now().String()))
 	}
 	return hex.EncodeToString(b[:])
-}
-
-func tenantFromIdentity(subject, email string) string {
-	if tenant := config.TenantKey(subject); tenant != "" {
-		return tenant
-	}
-	if tenant := config.TenantKey(email); tenant != "" {
-		return tenant
-	}
-	return "unknown"
 }
 
 func sanitizeNext(next string, basePath string) string {

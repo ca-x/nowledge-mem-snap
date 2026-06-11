@@ -1,10 +1,11 @@
-import type { RestoreImportOptions, RestoreJob, RestoreObject, Source, Target } from '../types';
+import type { RestoreDirectory, RestoreImportOptions, RestoreJob, RestoreObject, Source, Target } from '../types';
 
 export type RestoreStepKey = 'target' | 'object' | 'destination' | 'options' | 'progress';
 
 export type RestoreDraft = {
   targetKey: string;
   prefix: string;
+  directory: string;
   objectName: string;
   encryptionPassword: string;
   destinationSourceKey: string;
@@ -22,6 +23,7 @@ export type RestoreStepProps = {
   draft: RestoreDraft;
   targets: Target[];
   sources: Source[];
+  directories: RestoreDirectory[];
   objects: RestoreObject[];
   selectedObject?: RestoreObject;
   locale: string;

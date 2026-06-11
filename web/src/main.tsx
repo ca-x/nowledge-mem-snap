@@ -50,6 +50,7 @@ import { ExportOptionsPage } from './pages/ExportOptionsPage';
 import { RunsPage } from './pages/RunsPage';
 import { SchedulesPage } from './pages/SchedulesPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SiteAdminPage } from './pages/SiteAdminPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { TargetsPage } from './pages/TargetsPage';
 import { TasksPage } from './pages/TasksPage';
@@ -106,7 +107,7 @@ function Splash() {
 
 function SetupPage() {
   const { t } = useI18n();
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const submit = async () => {
@@ -121,7 +122,7 @@ function SetupPage() {
   return (
     <AuthShell title={t('setupTitle')} subtitle={t('setupSubtitle')}>
       <Field label={t('adminUsername')}>
-        <Input size="large" value={username} onChange={(e) => setUsername(e.target.value)} shadow />
+        <Input size="large" value={username} placeholder={t('adminUsernamePlaceholder')} onChange={(e) => setUsername(e.target.value)} shadow />
       </Field>
       <Field label={t('password')}>
         <Input size="large" type="password" value={password} onChange={(e) => setPassword(e.target.value)} shadow />
@@ -134,8 +135,8 @@ function SetupPage() {
 
 function LoginPage() {
   const { t } = useI18n();
-  const [options, setOptions] = useState<{ password: boolean; oidc: boolean; username: string }>({ password: true, oidc: false, username: 'admin' });
-  const [username, setUsername] = useState('admin');
+  const [options, setOptions] = useState<{ password: boolean; oidc: boolean; username: string }>({ password: true, oidc: false, username: '' });
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const next = nextFromSearch();
@@ -143,7 +144,6 @@ function LoginPage() {
   useEffect(() => {
     api<{ password: boolean; oidc: boolean; username: string }>('/api/auth/options').then((v) => {
       setOptions(v);
-      if (v.username) setUsername(v.username);
     });
   }, []);
 
@@ -162,7 +162,7 @@ function LoginPage() {
       {options.password && (
         <>
           <Field label={t('username')}>
-            <Input size="large" value={username} onChange={(e) => setUsername(e.target.value)} shadow />
+            <Input size="large" value={username} placeholder={t('usernamePlaceholder')} onChange={(e) => setUsername(e.target.value)} shadow />
           </Field>
           <Field label={t('password')}>
             <Input size="large" type="password" value={password} onChange={(e) => setPassword(e.target.value)} shadow />
@@ -211,6 +211,7 @@ function Dashboard() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [roots, setRoots] = useState<SourceRoot[]>([]);
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
+  const [authOptions, setAuthOptions] = useState<{ oidc: boolean }>({ oidc: false });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -225,18 +226,20 @@ function Dashboard() {
   const [activeTab, setActiveTab] = useState('sources');
 
   const load = async () => {
-    const [configResp, profileResp, runsResp, rootsResp, versionResp] = await Promise.all([
+    const [configResp, profileResp, runsResp, rootsResp, versionResp, authOptionsResp] = await Promise.all([
       api<Config>('/api/config'),
       api<Profile>('/api/profile'),
       api<{ runs: Run[] | null }>('/api/runs'),
       api<{ roots: SourceRoot[] | null }>('/api/source-roots'),
-      api<VersionInfo>('/api/version')
+      api<VersionInfo>('/api/version'),
+      api<{ oidc: boolean }>('/api/auth/options')
     ]);
     setCfg(normalizeConfig(configResp, t));
     setProfile(profileResp);
     setRuns(runsResp.runs ?? []);
     setRoots(rootsResp.roots ?? []);
     setVersionInfo(versionResp);
+    setAuthOptions({ oidc: Boolean(authOptionsResp.oidc) });
   };
 
   useEffect(() => {
@@ -333,6 +336,10 @@ function Dashboard() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const linkOIDC = () => {
+    window.location.href = appPath(`/auth/oidc/start?mode=link&next=${encodeURIComponent(currentAppPath())}`);
   };
 
   const removeItem = async (kind: 'sources' | 'targets' | 'schedules' | 'export_options' | 'backup_strategies' | 'tasks', index: number, successMessage: string) => {
@@ -460,6 +467,13 @@ function Dashboard() {
       children: <SettingsPage cfg={cfg} saving={saving} onSaveConfig={saveSettings} />
     }
   ];
+  if (profile.is_admin) {
+    dashboardTabs.push({
+      key: 'site',
+      label: t('siteManagement'),
+      children: <SiteAdminPage currentTenant={profile.tenant} locale={localeForLang(lang)} onCurrentUserRenamed={logout} />
+    });
+  }
 
   return (
     <div className="page dashboard">
@@ -577,6 +591,8 @@ function Dashboard() {
         saving={saving}
         onCancel={() => setProfileModalOpen(false)}
         onSave={saveProfile}
+        oidcEnabled={authOptions.oidc}
+        onLinkOIDC={linkOIDC}
       />
     </div>
   );

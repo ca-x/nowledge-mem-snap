@@ -22,6 +22,7 @@ func TestRestoreEndpointsRequireAuth(t *testing.T) {
 		path   string
 		body   string
 	}{
+		{method: http.MethodPost, path: "/api/restore/browse", body: `{}`},
 		{method: http.MethodPost, path: "/api/restore/objects", body: `{}`},
 		{method: http.MethodPost, path: "/api/restore/jobs", body: `{}`},
 		{method: http.MethodGet, path: "/api/restore/jobs/job-id"},

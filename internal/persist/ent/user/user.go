@@ -15,12 +15,20 @@ const (
 	FieldTenant = "tenant"
 	// FieldUsername holds the string denoting the username field in the database.
 	FieldUsername = "username"
+	// FieldEmail holds the string denoting the email field in the database.
+	FieldEmail = "email"
 	// FieldPasswordHash holds the string denoting the password_hash field in the database.
 	FieldPasswordHash = "password_hash"
 	// FieldDisplayName holds the string denoting the display_name field in the database.
 	FieldDisplayName = "display_name"
 	// FieldAvatarURL holds the string denoting the avatar_url field in the database.
 	FieldAvatarURL = "avatar_url"
+	// FieldOidcIssuer holds the string denoting the oidc_issuer field in the database.
+	FieldOidcIssuer = "oidc_issuer"
+	// FieldOidcSubject holds the string denoting the oidc_subject field in the database.
+	FieldOidcSubject = "oidc_subject"
+	// FieldOidcEmail holds the string denoting the oidc_email field in the database.
+	FieldOidcEmail = "oidc_email"
 	// FieldIsAdmin holds the string denoting the is_admin field in the database.
 	FieldIsAdmin = "is_admin"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -34,9 +42,13 @@ var Columns = []string{
 	FieldID,
 	FieldTenant,
 	FieldUsername,
+	FieldEmail,
 	FieldPasswordHash,
 	FieldDisplayName,
 	FieldAvatarURL,
+	FieldOidcIssuer,
+	FieldOidcSubject,
+	FieldOidcEmail,
 	FieldIsAdmin,
 	FieldCreatedAt,
 }
@@ -74,6 +86,11 @@ func ByUsername(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUsername, opts...).ToFunc()
 }
 
+// ByEmail orders the results by the email field.
+func ByEmail(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmail, opts...).ToFunc()
+}
+
 // ByPasswordHash orders the results by the password_hash field.
 func ByPasswordHash(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPasswordHash, opts...).ToFunc()
@@ -87,6 +104,21 @@ func ByDisplayName(opts ...sql.OrderTermOption) OrderOption {
 // ByAvatarURL orders the results by the avatar_url field.
 func ByAvatarURL(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAvatarURL, opts...).ToFunc()
+}
+
+// ByOidcIssuer orders the results by the oidc_issuer field.
+func ByOidcIssuer(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOidcIssuer, opts...).ToFunc()
+}
+
+// ByOidcSubject orders the results by the oidc_subject field.
+func ByOidcSubject(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOidcSubject, opts...).ToFunc()
+}
+
+// ByOidcEmail orders the results by the oidc_email field.
+func ByOidcEmail(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOidcEmail, opts...).ToFunc()
 }
 
 // ByIsAdmin orders the results by the is_admin field.

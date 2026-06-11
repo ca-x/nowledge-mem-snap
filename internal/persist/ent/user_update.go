@@ -56,6 +56,26 @@ func (_u *UserUpdate) SetNillableUsername(v *string) *UserUpdate {
 	return _u
 }
 
+// SetEmail sets the "email" field.
+func (_u *UserUpdate) SetEmail(v string) *UserUpdate {
+	_u.mutation.SetEmail(v)
+	return _u
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableEmail(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetEmail(*v)
+	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *UserUpdate) ClearEmail() *UserUpdate {
+	_u.mutation.ClearEmail()
+	return _u
+}
+
 // SetPasswordHash sets the "password_hash" field.
 func (_u *UserUpdate) SetPasswordHash(v string) *UserUpdate {
 	_u.mutation.SetPasswordHash(v)
@@ -107,6 +127,66 @@ func (_u *UserUpdate) SetNillableAvatarURL(v *string) *UserUpdate {
 // ClearAvatarURL clears the value of the "avatar_url" field.
 func (_u *UserUpdate) ClearAvatarURL() *UserUpdate {
 	_u.mutation.ClearAvatarURL()
+	return _u
+}
+
+// SetOidcIssuer sets the "oidc_issuer" field.
+func (_u *UserUpdate) SetOidcIssuer(v string) *UserUpdate {
+	_u.mutation.SetOidcIssuer(v)
+	return _u
+}
+
+// SetNillableOidcIssuer sets the "oidc_issuer" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableOidcIssuer(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetOidcIssuer(*v)
+	}
+	return _u
+}
+
+// ClearOidcIssuer clears the value of the "oidc_issuer" field.
+func (_u *UserUpdate) ClearOidcIssuer() *UserUpdate {
+	_u.mutation.ClearOidcIssuer()
+	return _u
+}
+
+// SetOidcSubject sets the "oidc_subject" field.
+func (_u *UserUpdate) SetOidcSubject(v string) *UserUpdate {
+	_u.mutation.SetOidcSubject(v)
+	return _u
+}
+
+// SetNillableOidcSubject sets the "oidc_subject" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableOidcSubject(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetOidcSubject(*v)
+	}
+	return _u
+}
+
+// ClearOidcSubject clears the value of the "oidc_subject" field.
+func (_u *UserUpdate) ClearOidcSubject() *UserUpdate {
+	_u.mutation.ClearOidcSubject()
+	return _u
+}
+
+// SetOidcEmail sets the "oidc_email" field.
+func (_u *UserUpdate) SetOidcEmail(v string) *UserUpdate {
+	_u.mutation.SetOidcEmail(v)
+	return _u
+}
+
+// SetNillableOidcEmail sets the "oidc_email" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableOidcEmail(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetOidcEmail(*v)
+	}
+	return _u
+}
+
+// ClearOidcEmail clears the value of the "oidc_email" field.
+func (_u *UserUpdate) ClearOidcEmail() *UserUpdate {
+	_u.mutation.ClearOidcEmail()
 	return _u
 }
 
@@ -185,6 +265,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Email(); ok {
+		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(user.FieldEmail, field.TypeString)
+	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
@@ -199,6 +285,24 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.AvatarURLCleared() {
 		_spec.ClearField(user.FieldAvatarURL, field.TypeString)
+	}
+	if value, ok := _u.mutation.OidcIssuer(); ok {
+		_spec.SetField(user.FieldOidcIssuer, field.TypeString, value)
+	}
+	if _u.mutation.OidcIssuerCleared() {
+		_spec.ClearField(user.FieldOidcIssuer, field.TypeString)
+	}
+	if value, ok := _u.mutation.OidcSubject(); ok {
+		_spec.SetField(user.FieldOidcSubject, field.TypeString, value)
+	}
+	if _u.mutation.OidcSubjectCleared() {
+		_spec.ClearField(user.FieldOidcSubject, field.TypeString)
+	}
+	if value, ok := _u.mutation.OidcEmail(); ok {
+		_spec.SetField(user.FieldOidcEmail, field.TypeString, value)
+	}
+	if _u.mutation.OidcEmailCleared() {
+		_spec.ClearField(user.FieldOidcEmail, field.TypeString)
 	}
 	if value, ok := _u.mutation.IsAdmin(); ok {
 		_spec.SetField(user.FieldIsAdmin, field.TypeBool, value)
@@ -254,6 +358,26 @@ func (_u *UserUpdateOne) SetNillableUsername(v *string) *UserUpdateOne {
 	return _u
 }
 
+// SetEmail sets the "email" field.
+func (_u *UserUpdateOne) SetEmail(v string) *UserUpdateOne {
+	_u.mutation.SetEmail(v)
+	return _u
+}
+
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableEmail(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetEmail(*v)
+	}
+	return _u
+}
+
+// ClearEmail clears the value of the "email" field.
+func (_u *UserUpdateOne) ClearEmail() *UserUpdateOne {
+	_u.mutation.ClearEmail()
+	return _u
+}
+
 // SetPasswordHash sets the "password_hash" field.
 func (_u *UserUpdateOne) SetPasswordHash(v string) *UserUpdateOne {
 	_u.mutation.SetPasswordHash(v)
@@ -305,6 +429,66 @@ func (_u *UserUpdateOne) SetNillableAvatarURL(v *string) *UserUpdateOne {
 // ClearAvatarURL clears the value of the "avatar_url" field.
 func (_u *UserUpdateOne) ClearAvatarURL() *UserUpdateOne {
 	_u.mutation.ClearAvatarURL()
+	return _u
+}
+
+// SetOidcIssuer sets the "oidc_issuer" field.
+func (_u *UserUpdateOne) SetOidcIssuer(v string) *UserUpdateOne {
+	_u.mutation.SetOidcIssuer(v)
+	return _u
+}
+
+// SetNillableOidcIssuer sets the "oidc_issuer" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableOidcIssuer(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetOidcIssuer(*v)
+	}
+	return _u
+}
+
+// ClearOidcIssuer clears the value of the "oidc_issuer" field.
+func (_u *UserUpdateOne) ClearOidcIssuer() *UserUpdateOne {
+	_u.mutation.ClearOidcIssuer()
+	return _u
+}
+
+// SetOidcSubject sets the "oidc_subject" field.
+func (_u *UserUpdateOne) SetOidcSubject(v string) *UserUpdateOne {
+	_u.mutation.SetOidcSubject(v)
+	return _u
+}
+
+// SetNillableOidcSubject sets the "oidc_subject" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableOidcSubject(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetOidcSubject(*v)
+	}
+	return _u
+}
+
+// ClearOidcSubject clears the value of the "oidc_subject" field.
+func (_u *UserUpdateOne) ClearOidcSubject() *UserUpdateOne {
+	_u.mutation.ClearOidcSubject()
+	return _u
+}
+
+// SetOidcEmail sets the "oidc_email" field.
+func (_u *UserUpdateOne) SetOidcEmail(v string) *UserUpdateOne {
+	_u.mutation.SetOidcEmail(v)
+	return _u
+}
+
+// SetNillableOidcEmail sets the "oidc_email" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableOidcEmail(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetOidcEmail(*v)
+	}
+	return _u
+}
+
+// ClearOidcEmail clears the value of the "oidc_email" field.
+func (_u *UserUpdateOne) ClearOidcEmail() *UserUpdateOne {
+	_u.mutation.ClearOidcEmail()
 	return _u
 }
 
@@ -413,6 +597,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Email(); ok {
+		_spec.SetField(user.FieldEmail, field.TypeString, value)
+	}
+	if _u.mutation.EmailCleared() {
+		_spec.ClearField(user.FieldEmail, field.TypeString)
+	}
 	if value, ok := _u.mutation.PasswordHash(); ok {
 		_spec.SetField(user.FieldPasswordHash, field.TypeString, value)
 	}
@@ -427,6 +617,24 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if _u.mutation.AvatarURLCleared() {
 		_spec.ClearField(user.FieldAvatarURL, field.TypeString)
+	}
+	if value, ok := _u.mutation.OidcIssuer(); ok {
+		_spec.SetField(user.FieldOidcIssuer, field.TypeString, value)
+	}
+	if _u.mutation.OidcIssuerCleared() {
+		_spec.ClearField(user.FieldOidcIssuer, field.TypeString)
+	}
+	if value, ok := _u.mutation.OidcSubject(); ok {
+		_spec.SetField(user.FieldOidcSubject, field.TypeString, value)
+	}
+	if _u.mutation.OidcSubjectCleared() {
+		_spec.ClearField(user.FieldOidcSubject, field.TypeString)
+	}
+	if value, ok := _u.mutation.OidcEmail(); ok {
+		_spec.SetField(user.FieldOidcEmail, field.TypeString, value)
+	}
+	if _u.mutation.OidcEmailCleared() {
+		_spec.ClearField(user.FieldOidcEmail, field.TypeString)
 	}
 	if value, ok := _u.mutation.IsAdmin(); ok {
 		_spec.SetField(user.FieldIsAdmin, field.TypeBool, value)

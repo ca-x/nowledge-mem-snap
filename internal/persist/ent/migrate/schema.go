@@ -65,9 +65,13 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "tenant", Type: field.TypeString},
 		{Name: "username", Type: field.TypeString, Unique: true},
+		{Name: "email", Type: field.TypeString, Nullable: true},
 		{Name: "password_hash", Type: field.TypeString},
 		{Name: "display_name", Type: field.TypeString, Nullable: true},
 		{Name: "avatar_url", Type: field.TypeString, Nullable: true},
+		{Name: "oidc_issuer", Type: field.TypeString, Nullable: true},
+		{Name: "oidc_subject", Type: field.TypeString, Nullable: true},
+		{Name: "oidc_email", Type: field.TypeString, Nullable: true},
 		{Name: "is_admin", Type: field.TypeBool, Default: false},
 		{Name: "created_at", Type: field.TypeTime},
 	}
@@ -81,6 +85,11 @@ var (
 				Name:    "user_tenant",
 				Unique:  true,
 				Columns: []*schema.Column{UsersColumns[1]},
+			},
+			{
+				Name:    "user_oidc_issuer_oidc_subject",
+				Unique:  true,
+				Columns: []*schema.Column{UsersColumns[7], UsersColumns[8]},
 			},
 		},
 	}

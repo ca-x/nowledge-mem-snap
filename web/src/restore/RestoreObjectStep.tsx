@@ -1,14 +1,15 @@
 import { Button, Card, Input } from 'animal-island-ui';
-import { FileArchive, Lock, RefreshCw } from 'lucide-react';
+import { FileArchive, FolderOpen, Lock, RefreshCw } from 'lucide-react';
 
-import { Field } from '../components/ui';
+import { Field, NativeSelect } from '../components/ui';
 import { formatBytes } from '../format';
 import { useI18n } from '../i18n';
 import type { RestoreDraft } from './types';
-import type { RestoreObject } from '../types';
+import type { RestoreDirectory, RestoreObject } from '../types';
 
-export function RestoreObjectStep({ draft, objects, selectedObject, locale, scanning, scanError, onDraft, onScan }: {
+export function RestoreObjectStep({ draft, directories, objects, selectedObject, locale, scanning, scanError, onDraft, onScan, onSelectDirectory }: {
   draft: RestoreDraft;
+  directories: RestoreDirectory[];
   objects: RestoreObject[];
   selectedObject?: RestoreObject;
   locale: string;
@@ -16,6 +17,7 @@ export function RestoreObjectStep({ draft, objects, selectedObject, locale, scan
   scanError: string;
   onDraft: (patch: Partial<RestoreDraft>) => void;
   onScan: () => void;
+  onSelectDirectory: (directory: string) => void;
 }) {
   const { t } = useI18n();
   const encrypted = selectedObject?.encrypted ?? draft.objectName.trim().endsWith('.zip.aes.json');
@@ -24,14 +26,30 @@ export function RestoreObjectStep({ draft, objects, selectedObject, locale, scan
   return (
     <div className="restore-object-step">
       <div className="restore-scan-row">
-        <Field label={t('restorePrefix')} help={t('restorePrefixTip')}>
-          <Input value={draft.prefix} onChange={(event) => onDraft({ prefix: event.target.value })} allowClear />
+        <Field label={t('restoreBrowsePrefix')} help={t('restoreBrowsePrefixTip')}>
+          <Input value={draft.prefix} placeholder={t('restoreBrowsePrefixPlaceholder')} onChange={(event) => onDraft({ prefix: event.target.value, directory: '', objectName: '' })} allowClear />
         </Field>
-        <Button type="primary" icon={<RefreshCw size={16} />} loading={scanning} onClick={onScan} disabled={scanning || !draft.targetKey || !draft.prefix.trim()}>
-          {t('restoreScanObjects')}
+        <Button type="primary" icon={<RefreshCw size={16} />} loading={scanning} onClick={onScan} disabled={scanning || !draft.targetKey}>
+          {t('restoreScanDirectories')}
         </Button>
       </div>
       {scanError && <p className="error" role="alert">{scanError}</p>}
+      {directories.length > 0 && (
+        <Card color="app-blue" pattern="app-blue" className="restore-directory-card">
+          <div className="settings-title"><FolderOpen size={18} />{t('restoreDirectory')}</div>
+          <Field label={t('restoreDirectory')} help={t('restoreDirectoryTip')}>
+            <NativeSelect
+              value={draft.directory}
+              onChange={onSelectDirectory}
+              placeholder={t('restoreSelectDirectory')}
+              options={directories.map((directory) => ({
+                key: directory.name,
+                label: `${directory.name} (${directory.object_count})`
+              }))}
+            />
+          </Field>
+        </Card>
+      )}
       {objects.length > 0 && (
         <div className="restore-object-list" role="list">
           {objects.map((object) => (

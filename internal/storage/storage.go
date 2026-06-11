@@ -36,6 +36,17 @@ type BackupObject struct {
 	Encrypted bool      `json:"encrypted"`
 }
 
+type BackupDirectory struct {
+	Name             string    `json:"name"`
+	ObjectCount      int       `json:"object_count"`
+	LatestModifiedAt time.Time `json:"latest_modified_at"`
+}
+
+type BackupBrowse struct {
+	Directories []BackupDirectory `json:"directories"`
+	Objects     []BackupObject    `json:"objects"`
+}
+
 type Factory struct{}
 
 func NewFactory() *Factory {
@@ -153,13 +164,34 @@ func ListBackupObjects(ctx context.Context, target Target, prefix string) ([]Bac
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(objects, func(i, j int) bool {
-		if objects[i].ModTime.Equal(objects[j].ModTime) {
-			return objects[i].Name > objects[j].Name
-		}
-		return objects[i].ModTime.After(objects[j].ModTime)
-	})
+	sortBackupObjects(objects)
 	return objects, nil
+}
+
+func BrowseBackupDirectories(ctx context.Context, target Target, prefix string) (BackupBrowse, error) {
+	scope := "."
+	if strings.TrimSpace(prefix) != "" && strings.TrimSpace(prefix) != "." && strings.TrimSpace(prefix) != "/" {
+		cleaned, err := cleanObjectPath(prefix)
+		if err != nil {
+			return BackupBrowse{}, err
+		}
+		scope = cleaned
+	}
+	browse, err := browseBackupDirectories(ctx, target.Fs, scope)
+	if os.IsNotExist(err) {
+		return BackupBrowse{}, nil
+	}
+	if err != nil {
+		return BackupBrowse{}, err
+	}
+	sort.Slice(browse.Directories, func(i, j int) bool {
+		if browse.Directories[i].LatestModifiedAt.Equal(browse.Directories[j].LatestModifiedAt) {
+			return browse.Directories[i].Name < browse.Directories[j].Name
+		}
+		return browse.Directories[i].LatestModifiedAt.After(browse.Directories[j].LatestModifiedAt)
+	})
+	sortBackupObjects(browse.Objects)
+	return browse, nil
 }
 
 func ApplyRetention(ctx context.Context, target Target, task config.TaskConfig, now time.Time) (int, error) {
@@ -269,6 +301,66 @@ func listBackupObjects(ctx context.Context, fs afero.Fs, scope string) ([]Backup
 		return nil
 	})
 	return objects, err
+}
+
+func browseBackupDirectories(ctx context.Context, fs afero.Fs, scope string) (BackupBrowse, error) {
+	scope = strings.Trim(strings.TrimSpace(scope), "/")
+	if scope == "" {
+		scope = "."
+	}
+	dirs := map[string]*BackupDirectory{}
+	rootObjects := []BackupObject{}
+	err := afero.Walk(fs, scope, func(name string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if info == nil || info.IsDir() || !isBackupObject(name) {
+			return nil
+		}
+		object := BackupObject{
+			Name:      name,
+			SizeBytes: info.Size(),
+			ModTime:   info.ModTime().UTC(),
+			Encrypted: strings.HasSuffix(name, archive.EncryptedExtension),
+		}
+		if path.Dir(name) == scope || (scope == "." && path.Dir(name) == ".") {
+			rootObjects = append(rootObjects, object)
+			return nil
+		}
+		dirName := path.Dir(name)
+		dir := dirs[dirName]
+		if dir == nil {
+			dir = &BackupDirectory{Name: dirName}
+			dirs[dirName] = dir
+		}
+		dir.ObjectCount++
+		if object.ModTime.After(dir.LatestModifiedAt) {
+			dir.LatestModifiedAt = object.ModTime
+		}
+		return nil
+	})
+	if err != nil {
+		return BackupBrowse{}, err
+	}
+	directories := make([]BackupDirectory, 0, len(dirs))
+	for _, dir := range dirs {
+		directories = append(directories, *dir)
+	}
+	return BackupBrowse{Directories: directories, Objects: rootObjects}, nil
+}
+
+func sortBackupObjects(objects []BackupObject) {
+	sort.Slice(objects, func(i, j int) bool {
+		if objects[i].ModTime.Equal(objects[j].ModTime) {
+			return objects[i].Name > objects[j].Name
+		}
+		return objects[i].ModTime.After(objects[j].ModTime)
+	})
 }
 
 func isBackupObject(name string) bool {

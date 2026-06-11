@@ -304,6 +304,23 @@ code {
   color: var(--animal-error-active);
 }
 
+.inline-notice {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 900;
+}
+
+.inline-notice.success {
+  background: rgba(111, 186, 44, 0.16);
+  color: var(--animal-success-active);
+}
+
+.inline-notice.danger {
+  background: rgba(224, 90, 90, 0.16);
+  color: var(--animal-error-active);
+}
+
 .mobile-section-nav {
   display: none;
 }
@@ -578,7 +595,7 @@ code {
   color: var(--animal-text-body);
   font: inherit;
   font-weight: 500;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   transition: all 0.25s var(--animal-ease);
 }
 
@@ -713,6 +730,80 @@ code {
 
 .file-input {
   display: none;
+}
+
+.oidc-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 2px solid rgba(196, 184, 158, 0.55);
+  border-radius: 14px;
+  background: rgba(247, 243, 223, 0.72);
+}
+
+.oidc-box strong,
+.oidc-box p {
+  margin: 0;
+}
+
+.oidc-box p {
+  color: var(--animal-text-muted);
+  font-weight: 800;
+}
+
+.site-admin-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 12px;
+}
+
+.user-card {
+  display: grid;
+  gap: 12px;
+}
+
+.user-card-head {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.user-card-head h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.user-card-head code {
+  overflow-wrap: anywhere;
+}
+
+.user-card-head small {
+  display: block;
+  margin-top: 3px;
+  color: var(--animal-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.user-card-meta {
+  display: grid;
+  gap: 6px;
+  color: var(--animal-text-muted);
+  font-weight: 800;
+}
+
+.user-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .restore-shell {
@@ -898,16 +989,20 @@ code {
 }
 
 .restore-object-row em {
+  max-width: 100%;
   padding: 4px 8px;
   border-radius: 999px;
   background: rgba(196, 184, 158, 0.28);
   font-size: 12px;
   font-style: normal;
   font-weight: 900;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .restore-manual-object,
 .restore-password-box,
+.restore-directory-card,
 .restore-progress-card,
 .restore-summary {
   padding: 16px;
@@ -1219,6 +1314,20 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .oidc-box {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .oidc-box button,
+  .site-admin-toolbar button {
+    width: 100%;
+  }
+
+  .site-admin-toolbar {
+    justify-content: stretch;
+  }
+
   .app-footer {
     margin-top: 14px;
     padding: 0 8px 8px;
@@ -1337,7 +1446,7 @@ code {
   .mobile-section-index {
     color: var(--animal-text-muted);
     font-size: 10px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
   }
 
   .mobile-section-tab.active .mobile-section-index {

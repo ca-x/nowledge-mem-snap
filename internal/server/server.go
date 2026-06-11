@@ -102,9 +102,12 @@ func (s *Server) innerHandler() http.Handler {
 	api.HandleFunc("/api/targets/test", s.handleTestTarget)
 	api.HandleFunc("/api/runs", s.handleRuns)
 	api.HandleFunc("/api/backup/run", s.handleRunBackup)
+	api.HandleFunc("/api/restore/browse", s.handleRestoreBrowse)
 	api.HandleFunc("/api/restore/objects", s.handleRestoreObjects)
 	api.HandleFunc("/api/restore/jobs", s.handleRestoreJobs)
 	api.HandleFunc("/api/restore/jobs/", s.handleRestoreJob)
+	api.HandleFunc("/api/admin/users", s.handleAdminUsers)
+	api.HandleFunc("/api/admin/users/", s.handleAdminUser)
 	mux.Handle("/api/", s.auth.Require(api))
 
 	static := s.staticHandler()
@@ -145,13 +148,14 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		var req struct {
 			DisplayName string `json:"display_name"`
+			Email       string `json:"email"`
 			AvatarURL   string `json:"avatar_url"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-		profile, err := s.store.UpdateProfile(claims.Tenant, req.DisplayName, req.AvatarURL)
+		profile, err := s.store.UpdateProfile(claims.Tenant, req.DisplayName, req.Email, req.AvatarURL)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -389,6 +393,49 @@ func (s *Server) handleRunBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"run": run})
 }
 
+func (s *Server) handleRestoreBrowse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	var req struct {
+		TargetKey string `json:"target_key"`
+		Prefix    string `json:"prefix"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	cfg, err := s.store.LoadUser(claims.Tenant)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	targetCfg, ok := cfg.Target(strings.TrimSpace(req.TargetKey))
+	if !ok {
+		writeError(w, http.StatusNotFound, "target was not found")
+		return
+	}
+	remoteTarget, err := storage.NewFactory().Target(r.Context(), targetCfg)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	browse, err := storage.BrowseBackupDirectories(ctx, remoteTarget, req.Prefix)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, browse)
+}
+
 func (s *Server) handleRestoreObjects(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -501,6 +548,152 @@ func (s *Server) handleRestoreJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, job)
+}
+
+func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		users, err := s.store.ListAdminUsers()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"users": users})
+	case http.MethodPost:
+		var req struct {
+			Username    string `json:"username"`
+			Password    string `json:"password"`
+			Email       string `json:"email"`
+			DisplayName string `json:"display_name"`
+			IsAdmin     bool   `json:"is_admin"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		user, err := s.store.CreateUser(req.Username, req.Password, req.DisplayName, req.Email, req.IsAdmin)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if s.onConfigChanged != nil {
+			s.onConfigChanged(user.Tenant)
+		}
+		writeJSON(w, http.StatusCreated, user)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleAdminUser(w http.ResponseWriter, r *http.Request) {
+	claims, ok := s.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	rest := strings.TrimPrefix(r.URL.Path, "/api/admin/users/")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeError(w, http.StatusNotFound, "user was not found")
+		return
+	}
+	tenant := config.TenantKey(parts[0])
+	if tenant == "" {
+		writeError(w, http.StatusNotFound, "user was not found")
+		return
+	}
+	if len(parts) == 1 {
+		switch r.Method {
+		case http.MethodPut:
+			var req struct {
+				Username    string `json:"username"`
+				Email       string `json:"email"`
+				DisplayName string `json:"display_name"`
+				IsAdmin     bool   `json:"is_admin"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid JSON body")
+				return
+			}
+			if tenant == claims.Tenant && !req.IsAdmin {
+				writeError(w, http.StatusBadRequest, "cannot remove administrator access from the current user")
+				return
+			}
+			user, err := s.store.UpdateUser(tenant, config.UserUpdate{
+				Username:    req.Username,
+				Email:       req.Email,
+				DisplayName: req.DisplayName,
+				IsAdmin:     req.IsAdmin,
+			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if s.onConfigChanged != nil {
+				s.onConfigChanged(tenant)
+				if user.Tenant != tenant {
+					s.onConfigChanged(user.Tenant)
+				}
+			}
+			writeJSON(w, http.StatusOK, user)
+		case http.MethodDelete:
+			if tenant == claims.Tenant {
+				writeError(w, http.StatusBadRequest, "cannot delete the current user")
+				return
+			}
+			if err := s.store.DeleteUser(tenant); err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if s.onConfigChanged != nil {
+				s.onConfigChanged(tenant)
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	if len(parts) == 2 && parts[1] == "password" {
+		if r.Method != http.MethodPut {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Password string `json:"password"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if err := s.store.ResetUserPassword(tenant, req.Password); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		return
+	}
+	writeError(w, http.StatusNotFound, "user was not found")
+}
+
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) (sessionClaims, bool) {
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return sessionClaims{}, false
+	}
+	profile, err := s.store.Profile(claims.Tenant)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return sessionClaims{}, false
+	}
+	if !profile.IsAdmin {
+		writeError(w, http.StatusForbidden, "administrator access required")
+		return sessionClaims{}, false
+	}
+	return claims, true
 }
 
 func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {

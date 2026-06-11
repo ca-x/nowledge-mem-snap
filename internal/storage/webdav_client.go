@@ -85,6 +85,24 @@ func (fs webDAVFileSystem) OpenFile(ctx context.Context, name string, flag int, 
 	if flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) != 0 {
 		return &webDAVWriteFile{ctx: ctx, fs: fs, name: name, buf: bytes.NewBuffer(nil)}, nil
 	}
+	info, err := fs.Stat(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		infos, err := fs.propfind(ctx, name, 1)
+		if err != nil {
+			return nil, err
+		}
+		entries := make([]os.FileInfo, 0, len(infos))
+		for _, entry := range infos {
+			if sameWebDAVEntry(info, entry) {
+				continue
+			}
+			entries = append(entries, entry)
+		}
+		return &webDAVDirFile{name: name, info: info, entries: entries}, nil
+	}
 	data, info, err := fs.read(ctx, name)
 	if err != nil {
 		return nil, err
@@ -240,6 +258,38 @@ func (f *webDAVReadFile) Readdir(int) ([]os.FileInfo, error) { return nil, os.Er
 func (f *webDAVReadFile) Stat() (os.FileInfo, error)         { return f.info, nil }
 func (f *webDAVReadFile) Write([]byte) (int, error)          { return 0, os.ErrPermission }
 
+type webDAVDirFile struct {
+	name    string
+	info    os.FileInfo
+	entries []os.FileInfo
+	offset  int
+}
+
+func (f *webDAVDirFile) Close() error { return nil }
+func (f *webDAVDirFile) Read([]byte) (int, error) {
+	return 0, os.ErrInvalid
+}
+func (f *webDAVDirFile) Seek(int64, int) (int64, error) { return 0, os.ErrInvalid }
+func (f *webDAVDirFile) Stat() (os.FileInfo, error)     { return f.info, nil }
+func (f *webDAVDirFile) Write([]byte) (int, error)      { return 0, os.ErrPermission }
+func (f *webDAVDirFile) Readdir(count int) ([]os.FileInfo, error) {
+	if f.offset >= len(f.entries) {
+		return nil, io.EOF
+	}
+	if count <= 0 {
+		out := f.entries[f.offset:]
+		f.offset = len(f.entries)
+		return out, nil
+	}
+	end := f.offset + count
+	if end > len(f.entries) {
+		end = len(f.entries)
+	}
+	out := f.entries[f.offset:end]
+	f.offset = end
+	return out, nil
+}
+
 type webDAVWriteFile struct {
 	ctx    context.Context
 	fs     webDAVFileSystem
@@ -277,6 +327,10 @@ func (i webDAVInfo) Mode() os.FileMode  { return i.mode }
 func (i webDAVInfo) ModTime() time.Time { return i.modTime }
 func (i webDAVInfo) IsDir() bool        { return i.mode.IsDir() }
 func (i webDAVInfo) Sys() any           { return nil }
+
+func sameWebDAVEntry(parent, entry os.FileInfo) bool {
+	return parent.Name() == entry.Name() && parent.IsDir() == entry.IsDir()
+}
 
 type propMultiStatus struct {
 	Responses []propResponse `xml:"response"`

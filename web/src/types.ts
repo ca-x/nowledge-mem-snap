@@ -120,9 +120,30 @@ export type BackupStrategy = {
 export type Profile = {
   tenant: string;
   username: string;
+  email?: string;
   display_name: string;
   avatar_url: string;
   is_admin: boolean;
+  oidc: {
+    linked: boolean;
+    issuer?: string;
+    email?: string;
+  };
+};
+
+export type AdminUser = {
+  tenant: string;
+  username: string;
+  email?: string;
+  display_name: string;
+  avatar_url: string;
+  is_admin: boolean;
+  oidc: {
+    linked: boolean;
+    issuer?: string;
+    email?: string;
+  };
+  created_at: string;
 };
 
 export type Run = {
@@ -162,6 +183,12 @@ export type RestoreObject = {
   size_bytes: number;
   modified_at: string;
   encrypted: boolean;
+};
+
+export type RestoreDirectory = {
+  name: string;
+  object_count: number;
+  latest_modified_at: string;
 };
 
 export type RestoreImportOptions = ExportConfig & {
