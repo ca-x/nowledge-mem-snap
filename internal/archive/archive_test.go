@@ -56,6 +56,36 @@ func TestBuildEncryptionOptional(t *testing.T) {
 	}
 }
 
+func TestDecryptRoundTrip(t *testing.T) {
+	plain := []byte("zip data")
+	encrypted, err := Encrypt(plain, "secret", Metadata{TaskKey: "task", TaskName: "Task"})
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	got, metadata, err := Decrypt(encrypted, "secret")
+	if err != nil {
+		t.Fatalf("Decrypt: %v", err)
+	}
+	if string(got) != string(plain) {
+		t.Fatalf("Decrypt data = %q, want %q", got, plain)
+	}
+	if metadata.TaskKey != "task" {
+		t.Fatalf("metadata task = %q", metadata.TaskKey)
+	}
+}
+
+func TestDecryptRejectsWrongPassword(t *testing.T) {
+	encrypted, err := Encrypt([]byte("zip data"), "secret", Metadata{TaskKey: "task"})
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+
+	if _, _, err := Decrypt(encrypted, "wrong"); err == nil {
+		t.Fatal("Decrypt with wrong password succeeded")
+	}
+}
+
 func TestRetentionDirectoryUsesStableTaskPrefix(t *testing.T) {
 	got := RetentionDirectory("nowledge-mem/{task}/{timestamp}", "018ff3c8-a1ec-74f8-9381-fc7d6fb17f51", "Default backup")
 	want := "nowledge-mem/Default-backup"

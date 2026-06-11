@@ -15,6 +15,7 @@ import (
 	"github.com/ca-x/nowledge-mem-snap/internal/backup"
 	"github.com/ca-x/nowledge-mem-snap/internal/config"
 	"github.com/ca-x/nowledge-mem-snap/internal/history"
+	"github.com/ca-x/nowledge-mem-snap/internal/restore"
 	"github.com/ca-x/nowledge-mem-snap/internal/source"
 	"github.com/ca-x/nowledge-mem-snap/internal/storage"
 	"github.com/ca-x/nowledge-mem-snap/version"
@@ -29,9 +30,13 @@ type Server struct {
 	basePath        string
 	onConfigChanged func(tenant string)
 	taskRuntime     func(tenant string) map[string]config.TaskRuntime
+	restoreManager  *restore.Manager
 }
 
 func New(ctx context.Context, cfg config.Config, store *config.Store, web fs.FS, logger *slog.Logger, onConfigChanged func(tenant string), taskRuntime func(tenant string) map[string]config.TaskRuntime) (*Server, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	basePath := config.NormalizeBasePath(cfg.Listen.BasePath)
 	if err := config.ValidateBasePath(basePath); err != nil {
 		return nil, err
@@ -50,6 +55,7 @@ func New(ctx context.Context, cfg config.Config, store *config.Store, web fs.FS,
 		basePath:        basePath,
 		onConfigChanged: onConfigChanged,
 		taskRuntime:     taskRuntime,
+		restoreManager:  restore.NewManager(logger),
 	}, nil
 }
 
@@ -96,6 +102,9 @@ func (s *Server) innerHandler() http.Handler {
 	api.HandleFunc("/api/targets/test", s.handleTestTarget)
 	api.HandleFunc("/api/runs", s.handleRuns)
 	api.HandleFunc("/api/backup/run", s.handleRunBackup)
+	api.HandleFunc("/api/restore/objects", s.handleRestoreObjects)
+	api.HandleFunc("/api/restore/jobs", s.handleRestoreJobs)
+	api.HandleFunc("/api/restore/jobs/", s.handleRestoreJob)
 	mux.Handle("/api/", s.auth.Require(api))
 
 	static := s.staticHandler()
@@ -378,6 +387,120 @@ func (s *Server) handleRunBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": run})
+}
+
+func (s *Server) handleRestoreObjects(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	var req struct {
+		TargetKey string `json:"target_key"`
+		Prefix    string `json:"prefix"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	cfg, err := s.store.LoadUser(claims.Tenant)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	target, ok := cfg.Target(strings.TrimSpace(req.TargetKey))
+	if !ok {
+		writeError(w, http.StatusNotFound, "target was not found")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	objects, err := s.restoreManager.ListObjects(ctx, target, req.Prefix)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"objects": objects})
+}
+
+func (s *Server) handleRestoreJobs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	var req struct {
+		TargetKey            string                `json:"target_key"`
+		ObjectName           string                `json:"object_name"`
+		DestinationSourceKey string                `json:"destination_source_key"`
+		EncryptionPassword   string                `json:"encryption_password"`
+		ImportOptions        restore.ImportOptions `json:"import_options"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	cfg, err := s.store.LoadUser(claims.Tenant)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	target, ok := cfg.Target(strings.TrimSpace(req.TargetKey))
+	if !ok {
+		writeError(w, http.StatusNotFound, "target was not found")
+		return
+	}
+	destination, ok := cfg.Source(strings.TrimSpace(req.DestinationSourceKey))
+	if !ok {
+		writeError(w, http.StatusNotFound, "destination source was not found")
+		return
+	}
+	job, err := s.restoreManager.Start(r.Context(), restore.StartRequest{
+		Tenant:             claims.Tenant,
+		Target:             target,
+		Destination:        destination,
+		ObjectName:         req.ObjectName,
+		EncryptionPassword: req.EncryptionPassword,
+		ImportOptions:      req.ImportOptions,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.logger.Info("restore job accepted", "tenant", claims.Tenant, "job", job.ID, "target", target.Key, "destination_source", destination.Key, "object", job.ObjectName)
+	writeJSON(w, http.StatusAccepted, map[string]any{"job_id": job.ID})
+}
+
+func (s *Server) handleRestoreJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	claims, ok := s.auth.Session(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/restore/jobs/")
+	id = strings.TrimSpace(strings.Trim(id, "/"))
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, http.StatusNotFound, "restore job was not found")
+		return
+	}
+	job, ok := s.restoreManager.Get(id)
+	if !ok || (job.Tenant != "" && job.Tenant != claims.Tenant) {
+		writeError(w, http.StatusNotFound, "restore job was not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, job)
 }
 
 func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {

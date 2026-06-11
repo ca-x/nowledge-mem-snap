@@ -35,6 +35,7 @@ PC：
 - 计划：支持每天、每周、单次执行；执行时间按进程 `TZ` 解释。
 - 每个任务可选 AES-GCM 加密备份包。
 - 任务只负责组合来源、目标、计划、导出选项和备份清理策略。
+- Restore 页面可以从已保存的 S3/WebDAV target 选择远端可移植备份对象，并导入到已保存的 Nowledge Mem API source。
 - 运行历史按条数和天数自动清理，避免数据库无限膨胀。
 - 使用 `slog` 输出结构化日志，并通过 lumberjack 写文件和自动轮转。
 - 嵌入式 React UI，使用 `animal-island-ui`。
@@ -135,6 +136,13 @@ environment:
 路径模板变量：`{task}` / `{task_name}` 使用任务显示名称，`{task_id}` 使用内部 UUID，`{date}` 使用 UTC `YYYY-MM-DD`，`{timestamp}` 使用 UTC `YYYYMMDDTHHMMSSZ`。
 
 自动清理远端备份时，只会扫描 `target.root_prefix + task.object_prefix` 推导出的稳定任务目录，并且只删除 `.zip` 或 `.zip.aes.json` 备份对象，不会扫描整个 bucket 或 WebDAV 根目录。
+
+远端恢复复用已保存的 S3/WebDAV target 和 Nowledge Mem API source：
+
+- 扫描对象时必须填写非空远端前缀；程序不会扫描整个 bucket 或 WebDAV 根目录。
+- 支持恢复 Nowledge Mem 可移植 `.zip` 导出包，以及本应用生成的 `.zip.aes.json` 加密包。
+- 加密包只在启动恢复任务时输入密码；密码不会保存。
+- 导入内容选项和 `mode` 会按 Nowledge Mem Data Import API 发送。默认模式使用 API 默认值；覆盖、清空这类危险模式默认不选。
 
 时间语义：
 

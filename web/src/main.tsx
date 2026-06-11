@@ -53,6 +53,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { TargetsPage } from './pages/TargetsPage';
 import { TasksPage } from './pages/TasksPage';
+import { RestorePage } from './pages/RestorePage';
 import { appPath, assetPath, currentAppPath, nextFromSearch, routePath } from './paths';
 import type {
   BackupStrategy,
@@ -390,6 +391,11 @@ function Dashboard() {
           onDelete={(index) => removeItem('targets', index, t('targetDeleted'))}
         />
       )
+    },
+    {
+      key: 'restore',
+      label: t('restore'),
+      children: <RestorePage targets={cfg.targets} sources={cfg.sources} locale={localeForLang(lang)} />
     },
     {
       key: 'schedules',

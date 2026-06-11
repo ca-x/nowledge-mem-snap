@@ -157,6 +157,47 @@ export type TestResult = {
   details?: Record<string, string>;
 };
 
+export type RestoreObject = {
+  name: string;
+  size_bytes: number;
+  modified_at: string;
+  encrypted: boolean;
+};
+
+export type RestoreImportOptions = ExportConfig & {
+  mode?: string;
+};
+
+export type RestoreState =
+  | 'queued'
+  | 'downloading'
+  | 'decrypting'
+  | 'uploading'
+  | 'importing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type RestoreJob = {
+  id: string;
+  state: RestoreState;
+  stage: RestoreState;
+  target_key: string;
+  object_name: string;
+  destination_source_key: string;
+  encrypted: boolean;
+  size_bytes: number;
+  mem_job_id?: string;
+  progress: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+  message?: string;
+  error?: string;
+  started_at: string;
+  finished_at?: string;
+};
+
 export type Editor<T> = {
   index: number;
   value: T;

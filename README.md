@@ -35,6 +35,7 @@ Mobile:
 - Daily, weekly, and one-time schedules. Schedule times use the process `TZ`.
 - Optional AES-GCM encrypted backup packages per task.
 - Tasks compose a source, target set, schedule, export option, and backup cleanup policy.
+- Restore tab for importing a portable Nowledge Mem backup object from a saved S3/WebDAV target into a saved Nowledge Mem API source.
 - Run history cleanup by count and age.
 - Structured `slog` logs to stdout and a rotating file via lumberjack.
 - Embedded React UI built with `animal-island-ui`.
@@ -135,6 +136,13 @@ Target layout has two levels:
 Path template tokens: `{task}` / `{task_name}` use the task display name, `{task_id}` uses the internal UUID, `{date}` uses UTC `YYYY-MM-DD`, and `{timestamp}` uses UTC `YYYYMMDDTHHMMSSZ`.
 
 Automatic remote cleanup only scans the stable directory derived from the task `object_prefix` under the target `root_prefix`, and only removes backup objects ending in `.zip` or `.zip.aes.json`.
+
+Remote restore uses the same saved S3/WebDAV targets and Nowledge Mem API sources:
+
+- Scan requires a non-empty remote prefix; the app will not scan an entire bucket or WebDAV root.
+- Supported restore objects are portable `.zip` exports and encrypted `.zip.aes.json` packages created by this app.
+- Encrypted packages ask for the password only when starting the restore job; the password is not stored.
+- Import content flags and `mode` are sent to the Nowledge Mem Data Import API. The default mode is the API default; overwrite/clear-style modes are never selected by default.
 
 Time semantics:
 

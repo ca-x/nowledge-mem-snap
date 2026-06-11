@@ -29,6 +29,13 @@ type Target struct {
 	Fs   afero.Fs
 }
 
+type BackupObject struct {
+	Name      string    `json:"name"`
+	SizeBytes int64     `json:"size_bytes"`
+	ModTime   time.Time `json:"modified_at"`
+	Encrypted bool      `json:"encrypted"`
+}
+
 type Factory struct{}
 
 func NewFactory() *Factory {
@@ -91,6 +98,68 @@ func Write(ctx context.Context, target Target, objectName string, data []byte) (
 		return int64(n), io.ErrShortWrite
 	}
 	return int64(n), nil
+}
+
+func Read(ctx context.Context, target Target, objectName string) ([]byte, error) {
+	objectName, err := cleanObjectPath(objectName)
+	if err != nil {
+		return nil, err
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	file, err := target.Fs.Open(objectName)
+	if err != nil {
+		return nil, fmt.Errorf("open remote object: %w", err)
+	}
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = file.Close()
+		case <-done:
+		}
+	}()
+	data, readErr := io.ReadAll(file)
+	close(done)
+	closeErr := file.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read remote object: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close remote object: %w", closeErr)
+	}
+	return data, nil
+}
+
+func ListBackupObjects(ctx context.Context, target Target, prefix string) ([]BackupObject, error) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return nil, fmt.Errorf("object prefix is required")
+	}
+	scope, err := cleanObjectPath(prefix)
+	if err != nil {
+		return nil, err
+	}
+	if scope == "" || scope == "." || scope == "/" {
+		return nil, fmt.Errorf("object prefix must not resolve to storage root")
+	}
+	objects, err := listBackupObjects(ctx, target.Fs, scope)
+	if os.IsNotExist(err) {
+		return []BackupObject{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(objects, func(i, j int) bool {
+		if objects[i].ModTime.Equal(objects[j].ModTime) {
+			return objects[i].Name > objects[j].Name
+		}
+		return objects[i].ModTime.After(objects[j].ModTime)
+	})
+	return objects, nil
 }
 
 func ApplyRetention(ctx context.Context, target Target, task config.TaskConfig, now time.Time) (int, error) {
@@ -174,13 +243,8 @@ func ApplyRetention(ctx context.Context, target Target, task config.TaskConfig, 
 	return deleted, nil
 }
 
-type backupObject struct {
-	Name    string
-	ModTime time.Time
-}
-
-func listBackupObjects(ctx context.Context, fs afero.Fs, scope string) ([]backupObject, error) {
-	objects := []backupObject{}
+func listBackupObjects(ctx context.Context, fs afero.Fs, scope string) ([]BackupObject, error) {
+	objects := []BackupObject{}
 	err := afero.Walk(fs, scope, func(name string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -196,7 +260,12 @@ func listBackupObjects(ctx context.Context, fs afero.Fs, scope string) ([]backup
 		if !isBackupObject(name) {
 			return nil
 		}
-		objects = append(objects, backupObject{Name: name, ModTime: info.ModTime().UTC()})
+		objects = append(objects, BackupObject{
+			Name:      name,
+			SizeBytes: info.Size(),
+			ModTime:   info.ModTime().UTC(),
+			Encrypted: strings.HasSuffix(name, archive.EncryptedExtension),
+		})
 		return nil
 	})
 	return objects, err

@@ -144,6 +144,51 @@ func Encrypt(plain []byte, password string, metadata Metadata) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func Decrypt(encrypted []byte, password string) ([]byte, Metadata, error) {
+	if strings.TrimSpace(password) == "" {
+		return nil, Metadata{}, fmt.Errorf("encryption password is required")
+	}
+	var env encryptedEnvelope
+	if err := json.Unmarshal(encrypted, &env); err != nil {
+		return nil, Metadata{}, fmt.Errorf("decode encrypted envelope: %w", err)
+	}
+	if env.Format != envelopeFormat {
+		return nil, Metadata{}, fmt.Errorf("unsupported encrypted envelope format %q", env.Format)
+	}
+	if env.KDF != "scrypt" {
+		return nil, Metadata{}, fmt.Errorf("unsupported encrypted envelope kdf %q", env.KDF)
+	}
+	salt, err := base64.StdEncoding.DecodeString(env.Salt)
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("decode salt: %w", err)
+	}
+	nonce, err := base64.StdEncoding.DecodeString(env.Nonce)
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("decode nonce: %w", err)
+	}
+	ciphertext, err := base64.StdEncoding.DecodeString(env.Ciphertext)
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("decode ciphertext: %w", err)
+	}
+	key, err := scrypt.Key([]byte(password), salt, env.N, env.R, env.P, 32)
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("derive encryption key: %w", err)
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("create AES cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("create GCM: %w", err)
+	}
+	plain, err := gcm.Open(nil, nonce, ciphertext, aad(env.Metadata))
+	if err != nil {
+		return nil, Metadata{}, fmt.Errorf("decrypt encrypted envelope: %w", err)
+	}
+	return plain, env.Metadata, nil
+}
+
 func ObjectName(prefix, taskKey, taskName string, at time.Time, extension string) string {
 	if at.IsZero() {
 		at = time.Now().UTC()
