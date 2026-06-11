@@ -2,9 +2,9 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Nowledge Mem Snap 是一个自托管的 [Nowledge Mem](https://mem.nowledge.co) 备份服务。
+Nowledge Mem Snap 是一个自托管的 [Nowledge Mem](https://mem.nowledge.co) 备份和恢复服务。
 
-它可以把每个登录用户自己的备份配置同步到 S3 兼容存储和 WebDAV。推荐 source 是 Nowledge Mem 官方 Data Transfer API 导出的可移植 ZIP；目录 source 主要用于 Docker 场景下的运维级目录快照，并且只能访问显式允许的挂载根目录。
+它给每个用户提供独立的备份空间，可以定时备份、保存到远端存储，也可以通过向导恢复到指定的 Nowledge Mem 实例。应用级备份使用 Nowledge Mem 的可移植导出和导入 API。目录快照也支持，主要用于运维管理 Docker volume，并且只能访问显式允许的路径。
 
 ## 界面截图
 
@@ -18,28 +18,20 @@ PC：
 
 ## 功能
 
-- 多用户隔离：source、target、schedule、导出选项、备份清理策略、task、运行历史按用户/租户隔离。
-- 配置全部存数据库，用户通过 Web UI 表单管理，不需要编辑本地 JSON 配置文件。
-- 首次启动设置向导；也支持通过环境变量初始化管理员。
-- 密码登录和可选 OIDC 登录。
-- 用户资料：昵称、头像 URL、上传图片自动转 base64 存库。
-- Source：
-  - `nowledgemem_api`：通过 `github.com/lib-x/nowledgemem-go` 导出 Nowledge Mem 可移植 ZIP。
-  - `directory`：压缩允许目录，适合挂载 Nowledge Mem Docker 的 `data` / `config` 目录做运维快照。
-- 远程 Nowledge Mem source、目录 source，以及 S3/WebDAV target 都可以在 UI 里点击按钮测试。
-- Target：
-  - S3/R2 兼容存储，基于 `github.com/fclairamb/afero-s3`。
-  - WebDAV，基于 `github.com/lib-x/aferodav` 和本项目的 HTTP WebDAV 适配。
-- 可复用的 Nowledge Mem 导出选项，用来选择可移植压缩包包含哪些数据。
-- 可复用的备份清理策略：不清理、保留最近 N 份、保留最近 N 天、保留某日期之后、保留某日期之前。
-- 计划：支持每天、每周、单次执行；执行时间按进程 `TZ` 解释。
-- 每个任务可选 AES-GCM 加密备份包。
-- 任务只负责组合来源、目标、计划、导出选项和备份清理策略。
-- Restore 页面可以从已保存的 S3/WebDAV target 选择远端可移植备份对象，并导入到已保存的 Nowledge Mem API source。
-- 运行历史按条数和天数自动清理，避免数据库无限膨胀。
-- 使用 `slog` 输出结构化日志，并通过 lumberjack 写文件和自动轮转。
-- 嵌入式 React UI，使用 `animal-island-ui`。
-- 使用 ent ORM，默认 SQLite 数据库，风格对齐 `cfui` 的 `entsqlite` 用法。
+- 通过官方 Data Transfer API 把 Nowledge Mem 备份成可移植 ZIP。
+- 从 S3 或 WebDAV 上已有的备份对象恢复到指定 Nowledge Mem 实例。
+- 恢复页面提供向导式流程：扫描对象、选择恢复实例、设置导入选项、查看实时进度。
+- 每个任务都可以开启备份包加密。恢复加密包时只在启动恢复任务时输入密码，密码不会保存。
+- 支持每天、每周、单次备份。单次任务执行后会自动禁用。
+- 可以在 UI 里手动运行备份，也可以通过 CLI 触发单次备份。
+- 备份可以保存到 S3/R2 兼容存储或 WebDAV，保存前可以先测试连接。
+- 可以快照显式允许的本地目录，适合运维管理 Docker volume 的备份。
+- 来源、目标、导出选项、保留策略和计划都可以复用到多个任务。
+- 支持远端备份清理：保留最近 N 份、保留最近 N 天、保留某日期之后、保留某日期之前。
+- 多用户隔离：每个用户的来源、目标、计划、任务、恢复任务和运行历史互不影响。
+- 所有配置都通过 Web UI 管理，不需要编辑本地 JSON 配置文件。
+- 支持密码登录、可选 OIDC 登录、首次启动设置向导，也支持环境变量初始化管理员。
+- 备份和恢复操作会记录到运行历史和轮转日志文件，方便后续排查。
 
 ## Docker
 
@@ -58,7 +50,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.9`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.12`。
 - `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 
@@ -171,7 +163,18 @@ go run . backup <tenant> <task>
 
 默认数据库是 `DATA_DIR/data.db`，SQLite DSN 默认启用 WAL、外键、normal synchronous 和 10 秒 busy timeout。可以通过 `NMEM_SNAP_DATABASE_TYPE` 加 `NMEM_SNAP_DATABASE_DSN` 切换到 PostgreSQL 或 MySQL；随附的 Compose 文件只把 PostgreSQL 和 MySQL 作为注释示例保留，所以 `docker compose up -d` 默认使用 SQLite。
 
-Web UI 按使用流程提供 source、target、schedule、导出选项、备份清理策略、task、运行历史和设置页面。用户不需要编辑原始 JSON 配置，也不需要输入内部记录标识。
+Web UI 按使用流程提供 source、target、schedule、导出选项、备份清理策略、task、恢复、运行历史和设置页面。用户不需要编辑原始 JSON 配置，也不需要输入内部记录标识。
+
+## 技术实现
+
+- 后端使用 Go `net/http`，内嵌静态资源和 React 前端。
+- Nowledge Mem 备份和恢复使用 `github.com/lib-x/nowledgemem-go`。
+- S3/R2 存储使用 `github.com/fclairamb/afero-s3`；WebDAV 使用 `github.com/lib-x/aferodav` 和本项目的 HTTP WebDAV 适配。
+- 配置和用户存储使用 ent ORM。默认数据库是 SQLite，也支持 PostgreSQL 和 MySQL。
+- 定时任务使用 `github.com/lib-x/timewheel`，日历时间计算放在 `internal/schedulecalc`。
+- 备份包使用 ZIP，可选 AES-GCM 加密和 scrypt 密钥派生。
+- 恢复任务以内存异步任务执行：下载远端对象、必要时解密、上传到 Nowledge Mem，并轮询导入状态。
+- 日志使用 `slog`，默认写 stdout；启用 `NMEM_SNAP_LOG_FILE` 后同时写入 lumberjack 轮转日志文件。
 
 ## GitHub Actions
 

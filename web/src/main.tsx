@@ -393,11 +393,6 @@ function Dashboard() {
       )
     },
     {
-      key: 'restore',
-      label: t('restore'),
-      children: <RestorePage targets={cfg.targets} sources={cfg.sources} locale={localeForLang(lang)} />
-    },
-    {
       key: 'schedules',
       label: t('schedules'),
       children: (
@@ -454,6 +449,11 @@ function Dashboard() {
       )
     },
     { key: 'runs', label: t('runs'), children: <RunsPage runs={runs} locale={localeForLang(lang)} /> },
+    {
+      key: 'restore',
+      label: t('restore'),
+      children: <RestorePage targets={cfg.targets} sources={cfg.sources} locale={localeForLang(lang)} />
+    },
     {
       key: 'settings',
       label: t('settings'),

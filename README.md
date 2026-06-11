@@ -2,9 +2,9 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-Self-hosted backup service for [Nowledge Mem](https://mem.nowledge.co).
+Self-hosted backup and restore service for [Nowledge Mem](https://mem.nowledge.co).
 
-It backs up each logged-in user's private configuration to S3-compatible storage and WebDAV targets. The preferred source is Nowledge Mem's application-level Data Transfer API. Directory sources are supported for operator-managed Docker volume snapshots, but only under explicitly allowed roots.
+Nowledge Mem Snap gives each user a private workspace for scheduled backups, remote storage, and guided restore into a Nowledge Mem instance. It uses Nowledge Mem's portable export/import API for application-level backups. Directory snapshots are also available for operator-managed Docker volumes, but only from paths you explicitly allow.
 
 ## Screenshots
 
@@ -18,28 +18,20 @@ Mobile:
 
 ## Features
 
-- Multi-user isolation: sources, targets, schedules, export options, backup strategies, tasks, and run history are per user.
-- Configuration is stored in the database. Users manage it from the web UI; no local JSON config file is required.
-- First-run setup wizard, or admin bootstrap by environment variable.
-- Password login and optional OIDC login.
-- User profile settings: nickname plus avatar URL or uploaded base64 image.
-- Sources:
-  - `nowledgemem_api`: portable Mem export ZIP via `github.com/lib-x/nowledgemem-go`.
-  - `directory`: ZIP of an allowed directory, intended for mounted Docker volumes.
-- Remote Nowledge Mem sources, directory sources, and S3/WebDAV targets can be tested from the UI before saving.
-- Targets:
-  - S3/R2-compatible storage via `github.com/fclairamb/afero-s3`.
-  - WebDAV via `github.com/lib-x/aferodav` and an HTTP WebDAV adapter.
-- Reusable export options for Nowledge Mem portable archives.
-- Reusable backup cleanup policies: no cleanup, keep latest N, keep recent N days, keep after date, or keep before date.
-- Daily, weekly, and one-time schedules. Schedule times use the process `TZ`.
-- Optional AES-GCM encrypted backup packages per task.
-- Tasks compose a source, target set, schedule, export option, and backup cleanup policy.
-- Restore tab for importing a portable Nowledge Mem backup object from a saved S3/WebDAV target into a saved Nowledge Mem API source.
-- Run history cleanup by count and age.
-- Structured `slog` logs to stdout and a rotating file via lumberjack.
-- Embedded React UI built with `animal-island-ui`.
-- ent ORM + SQLite default database, using the same `entsqlite` style as `cfui`.
+- Back up Nowledge Mem as a portable ZIP through the official Data Transfer API.
+- Restore from an existing backup object on S3 or WebDAV into a selected Nowledge Mem instance.
+- Use a step-by-step restore wizard with object scanning, destination selection, import options, and live progress.
+- Optionally encrypt backup packages per task. Restore passwords are entered only when starting a restore and are not stored.
+- Schedule daily, weekly, or one-time backups. One-time tasks are disabled automatically after they run.
+- Run backups manually from the UI or with the CLI.
+- Store backups on S3/R2-compatible storage or WebDAV, and test connections before saving them.
+- Snapshot explicitly allowed local directories, useful for operator-managed Docker volume backups.
+- Reuse export presets, retention policies, backup sources, storage targets, and schedules across tasks.
+- Clean up remote backups by keeping the latest N, keeping recent N days, keeping after a date, or keeping before a date.
+- Keep each user's sources, targets, schedules, tasks, restore jobs, and run history isolated.
+- Manage everything from the web UI. No local JSON config file is required.
+- Use password login, optional OIDC login, first-run setup, and optional admin bootstrap from environment variables.
+- Track backup and restore operations in run history and rotating log files.
 
 ## Docker
 
@@ -58,7 +50,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.9`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.12`.
 - `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 
@@ -171,7 +163,18 @@ go run . backup <tenant> <task>
 
 The default database is `DATA_DIR/data.db` with SQLite WAL, foreign keys, normal synchronous mode, and a 10s busy timeout. Use `NMEM_SNAP_DATABASE_TYPE` plus `NMEM_SNAP_DATABASE_DSN` to switch to PostgreSQL or MySQL. The bundled Compose file keeps PostgreSQL and MySQL as commented examples so `docker compose up -d` starts with SQLite by default.
 
-The web UI follows the setup flow: sources, targets, schedules, export options, backup strategies, tasks, run history, and settings. Users do not edit raw JSON configuration or internal record identifiers.
+The web UI follows the setup flow: sources, targets, schedules, export options, backup strategies, tasks, restore, run history, and settings. Users do not edit raw JSON configuration or internal record identifiers.
+
+## Technical implementation
+
+- Go backend with `net/http`, embedded static assets, and a React UI.
+- Nowledge Mem backup and restore use `github.com/lib-x/nowledgemem-go`.
+- S3/R2 storage uses `github.com/fclairamb/afero-s3`; WebDAV uses `github.com/lib-x/aferodav` with this project's HTTP WebDAV adapter.
+- Configuration and users are stored with ent ORM. SQLite is the default database; PostgreSQL and MySQL are optional.
+- Scheduled tasks run through `github.com/lib-x/timewheel` with calendar-time calculation in `internal/schedulecalc`.
+- Backup packages use ZIP, optional AES-GCM encryption, and scrypt key derivation.
+- Restore jobs run asynchronously in memory, download the selected object, decrypt it when needed, upload it to Nowledge Mem, and poll import status.
+- Logs use `slog` and write to stdout plus a rotating file through lumberjack when `NMEM_SNAP_LOG_FILE` is enabled.
 
 ## GitHub Actions
 
