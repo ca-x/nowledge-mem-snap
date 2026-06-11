@@ -9,6 +9,7 @@ import (
 
 	"github.com/ca-x/nowledge-mem-snap/internal/config"
 	"github.com/ca-x/nowledge-mem-snap/internal/schedulecalc"
+	"github.com/lib-x/timewheel"
 	"github.com/lib-x/timewheel/scheduler"
 )
 
@@ -63,6 +64,7 @@ func New(run RunFunc, logger *slog.Logger, onOnceDone func(taskKey string) error
 			ReschedulePolicy: scheduler.RescheduleAfterFinish,
 		},
 		scheduler.WithWheel(wheelInterval, wheelSlots),
+		scheduler.WithWheelOptions(timewheel.WithLogger[any](logger.With("component", "timewheel"))),
 		scheduler.WithCancelRunningOnRemove(true),
 		scheduler.WithCancelRunningOnReplace(true),
 		scheduler.WithWaitRunningOnClose(true),

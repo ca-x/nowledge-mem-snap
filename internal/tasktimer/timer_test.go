@@ -1,7 +1,10 @@
 package tasktimer
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +55,20 @@ func TestUpsertAndRemoveUpdateSnapshot(t *testing.T) {
 	timer.Remove("added")
 	if _, ok := timer.Snapshot()["added"]; ok {
 		t.Fatal("removed task still present in snapshot")
+	}
+}
+
+func TestTimeWheelDiagnosticsUseTaskLogger(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	timer := New(func(context.Context, config.TaskConfig) error { return nil }, logger, nil)
+
+	timer.Start(context.Background())
+	timer.Stop()
+
+	got := logs.String()
+	if !strings.Contains(got, `"msg":"timewheel: stopped"`) || !strings.Contains(got, `"component":"timewheel"`) {
+		t.Fatalf("timewheel stop log not recorded through task logger: %s", got)
 	}
 }
 
