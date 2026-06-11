@@ -1,9 +1,10 @@
 import type { Translate } from './i18n';
 import { formatBytes } from './format';
+import { apiPath } from './paths';
 import type { Source, TestResult } from './types';
 
 export async function downloadSourceTest(source: Source, t: Translate): Promise<TestResult> {
-  const res = await fetch('/api/sources/test/download', {
+  const res = await fetch(apiPath('/api/sources/test/download'), {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },

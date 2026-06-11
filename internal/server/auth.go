@@ -27,10 +27,12 @@ const (
 )
 
 type Auth struct {
-	cfg    config.AuthConfig
-	store  *config.Store
-	secret []byte
-	oidc   *oidcRuntime
+	cfg        config.AuthConfig
+	store      *config.Store
+	secret     []byte
+	basePath   string
+	cookiePath string
+	oidc       *oidcRuntime
 }
 
 type oidcRuntime struct {
@@ -54,7 +56,7 @@ type oidcState struct {
 	Expiry int64  `json:"exp"`
 }
 
-func NewAuth(ctx context.Context, cfg config.AuthConfig, store *config.Store) (*Auth, error) {
+func NewAuth(ctx context.Context, cfg config.AuthConfig, store *config.Store, basePath string, port int) (*Auth, error) {
 	secret := os.Getenv(cfg.SessionSecretEnv)
 	if secret == "" {
 		secret = os.Getenv("NMEM_SNAP_PASSWORD")
@@ -62,14 +64,24 @@ func NewAuth(ctx context.Context, cfg config.AuthConfig, store *config.Store) (*
 	if secret == "" {
 		secret = "dev-session-secret-change-me"
 	}
+	basePath = config.NormalizeBasePath(basePath)
+	cookiePath := "/"
+	if basePath != "" {
+		cookiePath = basePath
+	}
 	a := &Auth{
-		cfg:    cfg,
-		store:  store,
-		secret: []byte(secret),
+		cfg:        cfg,
+		store:      store,
+		secret:     []byte(secret),
+		basePath:   basePath,
+		cookiePath: cookiePath,
 	}
 	if cfg.OIDC.Enabled {
 		if cfg.OIDC.RedirectURL == "" {
-			cfg.OIDC.RedirectURL = fmt.Sprintf("http://localhost:%d/auth/oidc/callback", config.DefaultPort)
+			if port == 0 {
+				port = config.DefaultPort
+			}
+			cfg.OIDC.RedirectURL = fmt.Sprintf("http://localhost:%d%s/auth/oidc/callback", port, basePath)
 		}
 		provider, err := oidc.NewProvider(ctx, cfg.OIDC.IssuerURL)
 		if err != nil {
@@ -132,7 +144,7 @@ func (a *Auth) Logout(w http.ResponseWriter, _ *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    "",
-		Path:     "/",
+		Path:     a.cookiePath,
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -153,7 +165,7 @@ func (a *Auth) StartOIDC(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	next := sanitizeNext(r.URL.Query().Get("next"))
+	next := sanitizeNext(r.URL.Query().Get("next"), a.basePath)
 	state := randomToken()
 	nonce := randomToken()
 	encoded, err := a.signOIDCState(oidcState{
@@ -169,7 +181,7 @@ func (a *Auth) StartOIDC(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     oidcCookie,
 		Value:    encoded,
-		Path:     "/",
+		Path:     a.cookiePath,
 		MaxAge:   600,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -245,12 +257,12 @@ func (a *Auth) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     oidcCookie,
 		Value:    "",
-		Path:     "/",
+		Path:     a.cookiePath,
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-	http.Redirect(w, r, sanitizeNext(state.Next), http.StatusFound)
+	http.Redirect(w, r, a.withBase(sanitizeNext(state.Next, a.basePath)), http.StatusFound)
 }
 
 func (a *Auth) Require(next http.Handler) http.Handler {
@@ -267,7 +279,8 @@ func (a *Auth) Require(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+		nextPath := sanitizeNext(r.URL.RequestURI(), a.basePath)
+		http.Redirect(w, r, a.withBase("/login")+"?next="+url.QueryEscape(nextPath), http.StatusFound)
 	})
 }
 
@@ -291,7 +304,7 @@ func (a *Auth) setSession(w http.ResponseWriter, claims sessionClaims) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
 		Value:    value,
-		Path:     "/",
+		Path:     a.cookiePath,
 		MaxAge:   int(time.Until(time.Unix(claims.Expiry, 0)).Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
@@ -395,7 +408,7 @@ func tenantFromIdentity(subject, email string) string {
 	return "unknown"
 }
 
-func sanitizeNext(next string) string {
+func sanitizeNext(next string, basePath string) string {
 	if next == "" {
 		return "/"
 	}
@@ -405,7 +418,29 @@ func sanitizeNext(next string) string {
 	if !strings.HasPrefix(next, "/") {
 		return "/"
 	}
+	basePath = config.NormalizeBasePath(basePath)
+	if basePath != "" {
+		if next == basePath {
+			return "/"
+		}
+		if strings.HasPrefix(next, basePath+"/") {
+			return strings.TrimPrefix(next, basePath)
+		}
+	}
 	return next
+}
+
+func (a *Auth) withBase(path string) string {
+	if path == "" || path[0] != '/' {
+		path = "/" + path
+	}
+	if a.basePath == "" {
+		return path
+	}
+	if path == "/" {
+		return a.basePath + "/"
+	}
+	return a.basePath + path
 }
 
 func defaultString(value, fallback string) string {

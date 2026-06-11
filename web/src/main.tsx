@@ -53,6 +53,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { SourcesPage } from './pages/SourcesPage';
 import { TargetsPage } from './pages/TargetsPage';
 import { TasksPage } from './pages/TasksPage';
+import { appPath, assetPath, currentAppPath, nextFromSearch, routePath } from './paths';
 import type {
   BackupStrategy,
   Config,
@@ -72,7 +73,7 @@ import './styles.css';
 function Root() {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
   const [lang, setLangState] = useState<Lang>(initialLang);
-  const path = window.location.pathname;
+  const path = routePath();
   const t = useMemo(() => makeTranslator(lang), [lang]);
   const setLang = (next: Lang) => {
     setLangState(next);
@@ -97,7 +98,7 @@ function Root() {
 function Splash() {
   return (
     <div className="page center">
-      <img src="/logo.png" className="logo xl" alt="Nowledge Mem Snap" />
+      <img src={assetPath('/logo.png')} className="logo xl" alt="Nowledge Mem Snap" />
     </div>
   );
 }
@@ -111,7 +112,7 @@ function SetupPage() {
     setError('');
     try {
       await api('/api/setup', { method: 'POST', body: JSON.stringify({ username, password }) });
-      window.location.href = '/';
+      window.location.href = appPath('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('setupFailed'));
     }
@@ -136,7 +137,7 @@ function LoginPage() {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const next = new URLSearchParams(window.location.search).get('next') || '/';
+  const next = nextFromSearch();
 
   useEffect(() => {
     api<{ password: boolean; oidc: boolean; username: string }>('/api/auth/options').then((v) => {
@@ -149,7 +150,7 @@ function LoginPage() {
     setError('');
     try {
       await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
-      window.location.href = next;
+      window.location.href = appPath(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('loginFailed'));
     }
@@ -170,7 +171,7 @@ function LoginPage() {
         </>
       )}
       {options.oidc && (
-        <Button type="default" size="large" block onClick={() => { window.location.href = `/auth/oidc/start?next=${encodeURIComponent(next)}`; }}>
+        <Button type="default" size="large" block onClick={() => { window.location.href = appPath(`/auth/oidc/start?next=${encodeURIComponent(next)}`); }}>
           {t('signInOidc')}
         </Button>
       )}
@@ -183,7 +184,7 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
     <div className="page auth">
       <Card color="app-blue" className="auth-card" pattern="app-yellow">
         <div className="auth-toolbar"><LanguageSwitch /></div>
-        <img src="/logo.png" className="logo" alt="Nowledge Mem Snap" />
+        <img src={assetPath('/logo.png')} className="logo" alt="Nowledge Mem Snap" />
         <h1>{title}</h1>
         <p>{subtitle}</p>
         <div className="form-stack">{children}</div>
@@ -239,7 +240,7 @@ function Dashboard() {
 
   useEffect(() => {
     load().catch(() => {
-      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+      window.location.href = appPath(`/login?next=${encodeURIComponent(currentAppPath())}`);
     });
   }, []);
 
@@ -353,7 +354,7 @@ function Dashboard() {
 
   const logout = async () => {
     await api('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
+    window.location.href = appPath('/login');
   };
 
   const summary = useMemo(() => ({
@@ -458,7 +459,7 @@ function Dashboard() {
     <div className="page dashboard">
       <header className="topbar">
         <div className="brand">
-          <img src="/logo.png" className="logo small" alt="" />
+          <img src={assetPath('/logo.png')} className="logo small" alt="" />
           <div>
             <h1>Nowledge Mem Snap</h1>
             <p>{t('dashboardSubtitle')}</p>

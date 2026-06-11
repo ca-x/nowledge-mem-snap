@@ -57,7 +57,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 Image tags:
 
-- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.8`.
+- `vX.Y.Z`, `X.Y.Z`, `X.Y`: pushed from version tags such as `v0.1.9`.
 - `latest`: latest published version tag.
 - `sha-<commit>`: immutable commit image.
 
@@ -67,6 +67,11 @@ Useful environment variables:
 DATA_DIR=/app/data
 PORT=14335
 TZ=UTC
+
+# Optional reverse-proxy subpath. Empty means serving at the domain root.
+NMEM_SNAP_BASE_PATH=
+# Example:
+# NMEM_SNAP_BASE_PATH=/your-prefix
 
 # Database options: sqlite (default), postgres, mysql.
 NMEM_SNAP_DATABASE_TYPE=sqlite
@@ -95,6 +100,8 @@ NMEM_SNAP_OIDC_ISSUER_URL=https://issuer.example.com
 NMEM_SNAP_OIDC_CLIENT_ID=nowledge-mem-snap
 NMEM_SNAP_OIDC_CLIENT_SECRET=secret
 NMEM_SNAP_OIDC_REDIRECT_URL=http://localhost:14335/auth/oidc/callback
+# With NMEM_SNAP_BASE_PATH=/your-prefix:
+# NMEM_SNAP_OIDC_REDIRECT_URL=https://example.com/your-prefix/auth/oidc/callback
 NMEM_SNAP_OIDC_ALLOWED_DOMAINS=example.com
 
 # Rotating file logs. Default file is DATA_DIR/logs/nowledge-mem-snap.log.
@@ -117,6 +124,8 @@ environment:
 ```
 
 Use the API source for portable app exports and cross-version/cross-architecture restores. Use directory sources for operator-level snapshots of mounted directories.
+
+Subpath hosting: set `NMEM_SNAP_BASE_PATH` to the public path prefix, for example `/your-prefix`, and configure the reverse proxy to preserve that prefix when forwarding requests to the app. The same prefix must appear in OIDC redirect URLs.
 
 Target layout has two levels:
 

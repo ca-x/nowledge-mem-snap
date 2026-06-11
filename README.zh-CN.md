@@ -57,7 +57,7 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 
 镜像标签规则：
 
-- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.8`。
+- `vX.Y.Z`、`X.Y.Z`、`X.Y`：推送版本 tag 时生成，例如 `v0.1.9`。
 - `latest`：最新发布的版本 tag。
 - `sha-<commit>`：不可变的 commit 镜像。
 
@@ -67,6 +67,11 @@ docker pull ghcr.io/ca-x/nowledge-mem-snap:latest
 DATA_DIR=/app/data
 PORT=14335
 TZ=UTC
+
+# 可选：反向代理子路径。留空表示挂在域名根路径。
+NMEM_SNAP_BASE_PATH=
+# 示例：
+# NMEM_SNAP_BASE_PATH=/your-prefix
 
 # 数据库选项：sqlite（默认）、postgres、mysql。
 NMEM_SNAP_DATABASE_TYPE=sqlite
@@ -95,6 +100,8 @@ NMEM_SNAP_OIDC_ISSUER_URL=https://issuer.example.com
 NMEM_SNAP_OIDC_CLIENT_ID=nowledge-mem-snap
 NMEM_SNAP_OIDC_CLIENT_SECRET=secret
 NMEM_SNAP_OIDC_REDIRECT_URL=http://localhost:14335/auth/oidc/callback
+# 如果 NMEM_SNAP_BASE_PATH=/your-prefix：
+# NMEM_SNAP_OIDC_REDIRECT_URL=https://example.com/your-prefix/auth/oidc/callback
 NMEM_SNAP_OIDC_ALLOWED_DOMAINS=example.com
 
 # 日志轮转。默认文件是 DATA_DIR/logs/nowledge-mem-snap.log。
@@ -117,6 +124,8 @@ environment:
 ```
 
 建议优先使用 API source 做应用级可移植导出，适合跨版本、跨架构恢复。目录 source 更适合运维级目录快照。
+
+子路径托管：把 `NMEM_SNAP_BASE_PATH` 设置成公开访问路径前缀，例如 `/your-prefix`，并让反向代理转发到应用时保留这个前缀。OIDC redirect URL 也必须带同一个前缀。
 
 远端对象位置分两层：
 

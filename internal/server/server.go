@@ -2,9 +2,9 @@ package server
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -24,14 +24,20 @@ type Server struct {
 	cfg             config.Config
 	store           *config.Store
 	auth            *Auth
-	web             embed.FS
+	web             fs.FS
 	logger          *slog.Logger
+	basePath        string
 	onConfigChanged func(tenant string)
 	taskRuntime     func(tenant string) map[string]config.TaskRuntime
 }
 
-func New(ctx context.Context, cfg config.Config, store *config.Store, web embed.FS, logger *slog.Logger, onConfigChanged func(tenant string), taskRuntime func(tenant string) map[string]config.TaskRuntime) (*Server, error) {
-	auth, err := NewAuth(ctx, cfg.Auth, store)
+func New(ctx context.Context, cfg config.Config, store *config.Store, web fs.FS, logger *slog.Logger, onConfigChanged func(tenant string), taskRuntime func(tenant string) map[string]config.TaskRuntime) (*Server, error) {
+	basePath := config.NormalizeBasePath(cfg.Listen.BasePath)
+	if err := config.ValidateBasePath(basePath); err != nil {
+		return nil, err
+	}
+	cfg.Listen.BasePath = basePath
+	auth, err := NewAuth(ctx, cfg.Auth, store, basePath, cfg.Listen.Port)
 	if err != nil {
 		return nil, err
 	}
@@ -41,16 +47,34 @@ func New(ctx context.Context, cfg config.Config, store *config.Store, web embed.
 		auth:            auth,
 		web:             web,
 		logger:          logger,
+		basePath:        basePath,
 		onConfigChanged: onConfigChanged,
 		taskRuntime:     taskRuntime,
 	}, nil
 }
 
 func (s *Server) Handler() http.Handler {
+	inner := s.innerHandler()
+	if s.basePath == "" {
+		return secureHeaders(inner)
+	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	mux.HandleFunc("/healthz", healthzHandler)
+	mux.HandleFunc(s.basePath, func(w http.ResponseWriter, r *http.Request) {
+		target := s.basePath + "/"
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
+	mux.Handle(s.basePath+"/", http.StripPrefix(s.basePath, inner))
+	return secureHeaders(mux)
+}
+
+func (s *Server) innerHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", healthzHandler)
+	mux.HandleFunc("/app-config.js", s.handleAppConfig)
 	mux.HandleFunc("/api/auth/options", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, s.auth.LoginOptions())
 	})
@@ -80,7 +104,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("/favicon.ico", static)
 	mux.Handle("/login", static)
 	mux.Handle("/", s.auth.Require(static))
-	return secureHeaders(mux)
+	return mux
+}
+
+func healthzHandler(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
@@ -413,16 +441,64 @@ func (s *Server) staticHandler() http.Handler {
 	files := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(r.URL.Path, "/")
-		if p == "" || p == "login" || strings.HasPrefix(p, "auth/") {
-			r.URL.Path = "/"
-			files.ServeHTTP(w, r)
+		if p == "" || p == "index.html" || p == "login" || strings.HasPrefix(p, "auth/") {
+			s.serveIndex(w, sub)
 			return
 		}
 		if _, err := fs.Stat(sub, p); err != nil {
-			r.URL.Path = "/"
+			s.serveIndex(w, sub)
+			return
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) handleAppConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	payload, err := json.Marshal(map[string]string{"basePath": s.basePath})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build app config")
+		return
+	}
+	w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = fmt.Fprintf(w, "window.__NMEM_SNAP_CONFIG__ = %s;\n", payload)
+}
+
+func (s *Server) serveIndex(w http.ResponseWriter, sub fs.FS) {
+	data, err := fs.ReadFile(sub, "index.html")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "web assets unavailable")
+		return
+	}
+	body := string(data)
+	base := html.EscapeString(s.baseHref())
+	if strings.Contains(body, "<head>") {
+		body = strings.Replace(body, "<head>", "<head>\n    <base href=\""+base+"\" />", 1)
+	} else {
+		body = "<base href=\"" + base + "\" />\n" + body
+	}
+	script := "    <script src=\"./app-config.js\"></script>"
+	if strings.Contains(body, "<script type=\"module\"") {
+		body = strings.Replace(body, "<script type=\"module\"", script+"\n    <script type=\"module\"", 1)
+	} else if strings.Contains(body, "</body>") {
+		body = strings.Replace(body, "</body>", script+"\n  </body>", 1)
+	} else {
+		body += "\n" + script + "\n"
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write([]byte(body))
+}
+
+func (s *Server) baseHref() string {
+	if s.basePath == "" {
+		return "/"
+	}
+	return s.basePath + "/"
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

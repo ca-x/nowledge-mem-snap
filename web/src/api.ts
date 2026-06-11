@@ -1,5 +1,7 @@
+import { apiPath } from './paths';
+
 export const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
-  const res = await fetch(path, {
+  const res = await fetch(apiPath(path), {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init

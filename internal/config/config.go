@@ -60,8 +60,9 @@ type UserConfig struct {
 }
 
 type ListenConfig struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	BasePath string `json:"base_path,omitempty"`
 }
 
 type AuthConfig struct {
@@ -736,6 +737,7 @@ func Normalize(cfg Config) Config {
 	if cfg.Listen.Port == 0 {
 		cfg.Listen.Port = DefaultPort
 	}
+	cfg.Listen.BasePath = NormalizeBasePath(cfg.Listen.BasePath)
 	if strings.TrimSpace(cfg.Auth.Username) == "" {
 		cfg.Auth.Username = "admin"
 	}
@@ -949,6 +951,9 @@ func ApplyEnv(cfg Config) Config {
 			cfg.Listen.Port = port
 		}
 	}
+	if v := strings.TrimSpace(os.Getenv("NMEM_SNAP_BASE_PATH")); v != "" {
+		cfg.Listen.BasePath = NormalizeBasePath(v)
+	}
 	if v := strings.TrimSpace(os.Getenv("NMEM_API_URL")); v != "" {
 		for i := range cfg.Sources {
 			if cfg.Sources[i].Type == "nowledgemem_api" && cfg.Sources[i].Key == DefaultSourceKey {
@@ -1034,6 +1039,9 @@ func Redacted(cfg Config) Config {
 func Validate(cfg Config) error {
 	if cfg.Listen.Port < 1 || cfg.Listen.Port > 65535 {
 		return fmt.Errorf("listen port must be between 1 and 65535")
+	}
+	if err := ValidateBasePath(cfg.Listen.BasePath); err != nil {
+		return err
 	}
 	if cfg.Auth.OIDC.Enabled {
 		if strings.TrimSpace(cfg.Auth.OIDC.IssuerURL) == "" {
@@ -1157,6 +1165,48 @@ func Validate(cfg Config) error {
 		}
 		if _, ok := backupStrategyKeys[task.BackupStrategyKey]; !ok {
 			return fmt.Errorf("task %q references missing backup strategy %q", task.Key, task.BackupStrategyKey)
+		}
+	}
+	return nil
+}
+
+func NormalizeBasePath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "/" || value == "." || value == "./" {
+		return ""
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	value = strings.TrimRight(value, "/")
+	if value == "" || value == "/" {
+		return ""
+	}
+	return value
+}
+
+func ValidateBasePath(basePath string) error {
+	basePath = strings.TrimSpace(basePath)
+	if basePath == "" {
+		return nil
+	}
+	if !strings.HasPrefix(basePath, "/") {
+		return fmt.Errorf("listen base_path must start with /")
+	}
+	if strings.HasSuffix(basePath, "/") {
+		return fmt.Errorf("listen base_path must not end with /")
+	}
+	if strings.ContainsAny(basePath, "?#") {
+		return fmt.Errorf("listen base_path must be a path, not a URL with query or fragment")
+	}
+	for _, r := range basePath {
+		if r <= 0x20 || r == 0x7f {
+			return fmt.Errorf("listen base_path must not contain whitespace or control characters")
+		}
+	}
+	for _, segment := range strings.Split(strings.Trim(basePath, "/"), "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return fmt.Errorf("listen base_path contains an invalid path segment")
 		}
 	}
 	return nil
