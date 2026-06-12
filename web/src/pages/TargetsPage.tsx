@@ -22,7 +22,7 @@ export function TargetsPage({ targets, onAdd, onEdit, onDelete }: {
                 <Switch checked={target.enabled} disabled />
               </div>
               <p>{target.type.toUpperCase()}</p>
-              <code>{target.type === 's3' ? target.s3?.bucket_name : target.webdav?.url}</code>
+              <code>{targetSummary(target)}</code>
               <CardActions onEdit={() => onEdit(target, index)} onDelete={() => onDelete(index)} />
             </Card>
           ))}
@@ -30,4 +30,19 @@ export function TargetsPage({ targets, onAdd, onEdit, onDelete }: {
       )}
     </Panel>
   );
+}
+
+function targetSummary(target: Target) {
+  switch (target.type) {
+    case 's3':
+      return target.s3?.root_prefix || target.s3?.bucket_name || target.key;
+    case 'webdav':
+      return target.webdav?.root_prefix || target.webdav?.url || target.key;
+    case 'gcs':
+      return target.gcs?.root_prefix || target.gcs?.bucket_name || target.key;
+    case 'sftp':
+      return target.sftp?.root_prefix || target.sftp?.host || target.key;
+    default:
+      return target.key;
+  }
 }

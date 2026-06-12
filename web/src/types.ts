@@ -1,5 +1,5 @@
 export type SourceType = 'nowledgemem_api' | 'directory';
-export type TargetType = 's3' | 'webdav';
+export type TargetType = 's3' | 'webdav' | 'gcs' | 'sftp';
 export type ScheduleType = 'daily' | 'weekly' | 'once';
 
 export type ExportFlag =
@@ -47,6 +47,28 @@ export type WebDAVConfig = {
   password_env?: string;
 };
 
+export type GCSConfig = {
+  bucket_name: string;
+  root_prefix: string;
+  credentials_json?: string;
+  credentials_json_env?: string;
+};
+
+export type SFTPConfig = {
+  host: string;
+  port: number;
+  root_prefix: string;
+  username: string;
+  password?: string;
+  password_env?: string;
+  private_key?: string;
+  private_key_env?: string;
+  private_key_passphrase?: string;
+  private_key_passphrase_env?: string;
+  host_key_sha256?: string;
+  insecure_ignore_host_key?: boolean;
+};
+
 export type Target = {
   key: string;
   name: string;
@@ -54,6 +76,8 @@ export type Target = {
   type: TargetType;
   s3?: S3Config;
   webdav?: WebDAVConfig;
+  gcs?: GCSConfig;
+  sftp?: SFTPConfig;
 };
 
 export type Schedule = {

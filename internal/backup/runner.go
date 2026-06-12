@@ -147,6 +147,11 @@ func (r *Runner) run(ctx context.Context, task config.TaskConfig, trigger string
 			targetLogger.Info("backup upload started", "object", artifact.Name, "bytes", artifact.SizeBytes)
 			target, err := r.factory.Target(ctx, targetCfg)
 			if err == nil {
+				defer func() {
+					if closeErr := target.Close(); closeErr != nil {
+						targetLogger.Warn("backup target close failed", "error", closeErr)
+					}
+				}()
 				result.Bytes, err = storage.Write(ctx, target, artifact.Name, artifact.Data)
 			}
 			if err == nil {

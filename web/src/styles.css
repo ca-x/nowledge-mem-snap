@@ -582,6 +582,66 @@ code {
   line-height: 1.35;
 }
 
+.delete-confirm {
+  display: grid;
+  gap: 12px;
+}
+
+.delete-warning {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border: 2px solid rgba(224, 90, 90, 0.38);
+  border-radius: 14px;
+  background: rgba(224, 90, 90, 0.12);
+  color: var(--animal-error-active);
+}
+
+.delete-warning.blocked {
+  border-color: rgba(207, 151, 51, 0.5);
+  background: rgba(255, 211, 105, 0.18);
+  color: #9d681a;
+}
+
+.delete-warning strong,
+.delete-warning p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.delete-warning p {
+  margin-top: 4px;
+  color: var(--animal-text-body);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.reference-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.reference-list span {
+  color: var(--animal-text-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.reference-list code {
+  max-width: 100%;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(196, 184, 158, 0.28);
+  color: var(--animal-text-body);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
 .panel {
   padding-top: 14px;
 }
@@ -839,6 +899,10 @@ code {
   gap: 10px 12px;
 }
 
+.form-grid-span-2 {
+  grid-column: 1 / -1;
+}
+
 .field {
   display: grid;
   gap: 5px;
@@ -850,6 +914,30 @@ code {
 .field > span,
 .switch-field > span {
   font-size: 14px;
+}
+
+.field-textarea {
+  min-height: 118px;
+  width: 100%;
+  resize: vertical;
+  border: 2px solid rgba(196, 184, 158, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 252, 238, 0.92);
+  color: var(--animal-text);
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.field-textarea:focus {
+  border-color: var(--animal-primary);
+  box-shadow: 0 0 0 3px rgba(98, 140, 93, 0.16);
+}
+
+.secret-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .label-with-tip {

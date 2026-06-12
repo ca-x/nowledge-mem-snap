@@ -2,14 +2,19 @@ package storage
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
+	"net"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/afero"
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/webdav"
 
 	"github.com/ca-x/nowledge-mem-snap/internal/config"
@@ -252,6 +257,41 @@ func TestBrowseBackupDirectoriesWorksWithWebDAVTarget(t *testing.T) {
 	}
 	if len(objects) != 1 || objects[0].Name != "backups/task-b/export.zip.aes.json" || !objects[0].Encrypted {
 		t.Fatalf("objects = %#v, want encrypted backup in backups/task-b", objects)
+	}
+}
+
+func TestSFTPHostKeyCallbackAcceptsSHA256FingerprintWithoutPrefix(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	signer, err := ssh.NewSignerFromSigner(privateKey)
+	if err != nil {
+		t.Fatalf("new signer: %v", err)
+	}
+	publicKey := signer.PublicKey()
+	fingerprint := strings.TrimPrefix(ssh.FingerprintSHA256(publicKey), "SHA256:")
+
+	callback := sftpHostKeyCallback(config.SFTPConfig{HostKeySHA256: fingerprint})
+	if err := callback("sftp.example.com:22", &net.TCPAddr{}, publicKey); err != nil {
+		t.Fatalf("host key callback rejected matching fingerprint: %v", err)
+	}
+
+	callback = sftpHostKeyCallback(config.SFTPConfig{HostKeySHA256: "different"})
+	if err := callback("sftp.example.com:22", &net.TCPAddr{}, publicKey); err == nil {
+		t.Fatal("host key callback accepted mismatched fingerprint")
+	}
+}
+
+func TestPrefixFSPreservesAbsolutePrefixWhenRequested(t *testing.T) {
+	base := afero.NewMemMapFs()
+	fs := prefixFS{Fs: base, prefix: "/remote/backups", preserveLeadingSlash: true}
+
+	if err := fs.MkdirAll("task-a", 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if _, err := base.Stat("/remote/backups/task-a"); err != nil {
+		t.Fatalf("absolute prefixed directory was not created: %v", err)
 	}
 }
 

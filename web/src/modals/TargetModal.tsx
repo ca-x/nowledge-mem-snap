@@ -3,10 +3,10 @@ import { Button, Checkbox, Input, Modal, Radio } from 'animal-island-ui';
 import { CheckCircle2, ServerCog, XCircle } from 'lucide-react';
 
 import { api } from '../api';
-import { defaultS3, defaultWebDAV } from '../configDefaults';
+import { defaultGCS, defaultS3, defaultSFTP, defaultWebDAV } from '../configDefaults';
 import { useI18n } from '../i18n';
 import { Field, FormGrid, ModalFooter, SwitchField, Tip } from '../components/ui';
-import type { Editor, S3Config, Target, TargetType, TestResult, WebDAVConfig } from '../types';
+import type { Editor, GCSConfig, S3Config, SFTPConfig, Target, TargetType, TestResult, WebDAVConfig } from '../types';
 
 export function TargetModal({ editor, saving, onChange, onCancel, onSave }: {
   editor: Editor<Target> | null;
@@ -77,9 +77,13 @@ function TargetForm({ value, onChange }: { value: Target; onChange: (value: Targ
   const { t } = useI18n();
   const s3 = defaultS3(value);
   const webdav = defaultWebDAV(value);
+  const gcs = defaultGCS(value);
+  const sftp = defaultSFTP(value);
   const set = (patch: Partial<Target>) => onChange({ ...value, ...patch });
   const setS3 = (patch: Partial<S3Config>) => set({ s3: { ...s3, ...patch } });
   const setWebDAV = (patch: Partial<WebDAVConfig>) => set({ webdav: { ...webdav, ...patch } });
+  const setGCS = (patch: Partial<GCSConfig>) => set({ gcs: { ...gcs, ...patch } });
+  const setSFTP = (patch: Partial<SFTPConfig>) => set({ sftp: { ...sftp, ...patch } });
   return (
     <div className="editor-form">
       <Field label={t('name')}>
@@ -92,11 +96,13 @@ function TargetForm({ value, onChange }: { value: Target; onChange: (value: Targ
           onChange={(next) => set({ type: String(next) as TargetType })}
           options={[
             { label: 'S3 / R2', value: 's3' },
-            { label: 'WebDAV', value: 'webdav' }
+            { label: 'WebDAV', value: 'webdav' },
+            { label: 'Google Cloud Storage', value: 'gcs' },
+            { label: 'SFTP', value: 'sftp' }
           ]}
         />
       </Field>
-      {value.type === 's3' ? (
+      {value.type === 's3' && (
         <>
           <FormGrid>
             <Field label={t('endpointUrl')}>
@@ -120,7 +126,8 @@ function TargetForm({ value, onChange }: { value: Target; onChange: (value: Targ
           </FormGrid>
           <SwitchField label={t('pathStyle')} checked={s3.path_style} onChange={(pathStyle) => setS3({ path_style: pathStyle })} />
         </>
-      ) : (
+      )}
+      {value.type === 'webdav' && (
         <FormGrid>
           <Field label={t('webdavUrl')}>
             <Input value={webdav.url} onChange={(e) => setWebDAV({ url: e.target.value })} allowClear />
@@ -135,6 +142,68 @@ function TargetForm({ value, onChange }: { value: Target; onChange: (value: Targ
             <Input type="password" value={webdav.password ?? ''} onChange={(e) => setWebDAV({ password: e.target.value })} allowClear />
           </Field>
         </FormGrid>
+      )}
+      {value.type === 'gcs' && (
+        <FormGrid>
+          <Field label={t('bucket')}>
+            <Input value={gcs.bucket_name} onChange={(e) => setGCS({ bucket_name: e.target.value })} allowClear />
+          </Field>
+          <Field label={t('rootPrefix')}>
+            <Input value={gcs.root_prefix} onChange={(e) => setGCS({ root_prefix: e.target.value })} allowClear />
+          </Field>
+          <div className="form-grid-span-2">
+            <Field label={t('gcsCredentialsJson')} help={t('secretPreserveHelp')}>
+              <textarea
+                className="field-textarea secret-textarea"
+                value={gcs.credentials_json ?? ''}
+                onChange={(e) => setGCS({ credentials_json: e.target.value })}
+                rows={5}
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </Field>
+          </div>
+        </FormGrid>
+      )}
+      {value.type === 'sftp' && (
+        <>
+          <FormGrid>
+            <Field label={t('sftpHost')}>
+              <Input value={sftp.host} onChange={(e) => setSFTP({ host: e.target.value })} allowClear />
+            </Field>
+            <Field label={t('sftpPort')}>
+              <Input type="number" min={1} max={65535} value={String(sftp.port || 22)} onChange={(e) => setSFTP({ port: Math.max(1, Number(e.target.value) || 22) })} />
+            </Field>
+            <Field label={t('rootPrefix')}>
+              <Input value={sftp.root_prefix} onChange={(e) => setSFTP({ root_prefix: e.target.value })} allowClear />
+            </Field>
+            <Field label={t('sftpUsername')}>
+              <Input value={sftp.username} onChange={(e) => setSFTP({ username: e.target.value })} allowClear />
+            </Field>
+            <Field label={t('sftpPassword')} help={t('secretPreserveHelp')}>
+              <Input type="password" value={sftp.password ?? ''} onChange={(e) => setSFTP({ password: e.target.value })} allowClear />
+            </Field>
+            <div className="form-grid-span-2">
+              <Field label={t('sftpPrivateKey')} help={t('secretPreserveHelp')}>
+                <textarea
+                  className="field-textarea secret-textarea"
+                  value={sftp.private_key ?? ''}
+                  onChange={(e) => setSFTP({ private_key: e.target.value })}
+                  rows={5}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </Field>
+            </div>
+            <Field label={t('sftpPrivateKeyPassphrase')} help={t('secretPreserveHelp')}>
+              <Input type="password" value={sftp.private_key_passphrase ?? ''} onChange={(e) => setSFTP({ private_key_passphrase: e.target.value })} allowClear />
+            </Field>
+            <Field label={t('sftpHostKeySha256')} help={t('sftpHostKeySha256Tip')}>
+              <Input value={sftp.host_key_sha256 ?? ''} onChange={(e) => setSFTP({ host_key_sha256: e.target.value })} allowClear />
+            </Field>
+          </FormGrid>
+          <SwitchField label={t('sftpInsecureIgnoreHostKey')} checked={Boolean(sftp.insecure_ignore_host_key)} onChange={(insecure) => setSFTP({ insecure_ignore_host_key: insecure })} />
+        </>
       )}
     </div>
   );

@@ -55,6 +55,7 @@ func Test(ctx context.Context, targetCfg config.TargetConfig, uploadFile bool) T
 			},
 		}
 	}
+	defer func() { _ = target.Close() }()
 
 	objectName := ".nowledge-mem-snap-test-" + time.Now().UTC().Format("20060102T150405.000000000Z") + ".txt"
 	written, err := Write(ctx, target, objectName, []byte("nowledge-mem-snap target test\n"))
@@ -133,6 +134,59 @@ func probeTarget(ctx context.Context, targetCfg config.TargetConfig) TestResult 
 					"error": err.Error(),
 					"type":  targetCfg.Type,
 				},
+			}
+		}
+	case "gcs":
+		targetCfg.GCS.RootPrefix = ""
+		target, err := NewFactory().Target(ctx, targetCfg)
+		if err != nil {
+			return TestResult{
+				OK:      false,
+				Code:    "target_probe_failed",
+				Message: "target connection test failed: " + err.Error(),
+				Details: map[string]string{
+					"error": err.Error(),
+					"type":  targetCfg.Type,
+				},
+			}
+		}
+		defer func() { _ = target.Close() }()
+		if _, err := target.Fs.Stat("."); err != nil {
+			return TestResult{
+				OK:      false,
+				Code:    "target_probe_failed",
+				Message: "target connection test failed: " + err.Error(),
+				Details: map[string]string{
+					"error": err.Error(),
+					"type":  targetCfg.Type,
+				},
+			}
+		}
+	case "sftp":
+		target, err := NewFactory().Target(ctx, targetCfg)
+		if err != nil {
+			return TestResult{
+				OK:      false,
+				Code:    "target_probe_failed",
+				Message: "target connection test failed: " + err.Error(),
+				Details: map[string]string{
+					"error": err.Error(),
+					"type":  targetCfg.Type,
+				},
+			}
+		}
+		defer func() { _ = target.Close() }()
+		if targetCfg.SFTP.RootPrefix != "" {
+			if _, err := target.Fs.Stat("."); err != nil {
+				return TestResult{
+					OK:      false,
+					Code:    "target_probe_failed",
+					Message: "target connection test failed: " + err.Error(),
+					Details: map[string]string{
+						"error": err.Error(),
+						"type":  targetCfg.Type,
+					},
+				}
 			}
 		}
 	default:

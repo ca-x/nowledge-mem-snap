@@ -19,12 +19,12 @@ Mobile:
 ## Features
 
 - Back up Nowledge Mem as a portable ZIP through the official Data Transfer API.
-- Restore from an existing backup object on S3 or WebDAV into a selected Nowledge Mem instance.
+- Restore from an existing backup object on S3, WebDAV, Google Cloud Storage, or SFTP into a selected Nowledge Mem instance.
 - Use a step-by-step restore wizard with object scanning, destination selection, import options, and live progress.
 - Optionally encrypt backup packages per task. Restore passwords are entered only when starting a restore and are not stored.
 - Schedule daily, weekly, or one-time backups. One-time tasks are disabled automatically after they run.
 - Run backups manually from the UI or with the CLI.
-- Store backups on S3/R2-compatible storage or WebDAV, and test connections before saving them.
+- Store backups on S3/R2-compatible storage, WebDAV, Google Cloud Storage, or SFTP, and test connections before saving them.
 - Snapshot explicitly allowed local directories, useful for operator-managed Docker volume backups.
 - Reuse export presets, retention policies, backup sources, storage targets, and schedules across tasks.
 - Clean up remote backups by keeping the latest N, keeping recent N days, keeping after a date, or keeping before a date.
@@ -122,16 +122,18 @@ Subpath hosting: set `NMEM_SNAP_BASE_PATH` to the public path prefix, for exampl
 
 Target layout has two levels:
 
-- Target `root_prefix`: the remote root directory/prefix inside the bucket or WebDAV account.
+- Target `root_prefix`: the remote root directory/prefix inside the bucket or WebDAV/SFTP account.
 - Task `object_prefix`: the task-specific path template under that root, for example `nowledge-mem/{task}/{timestamp}`.
+
+Supported target types are S3/R2 (`s3`), WebDAV (`webdav`), Google Cloud Storage (`gcs`), and SFTP (`sftp`). GCS and SFTP use Afero's upstream experimental backends. GCS can use service account JSON in `credentials_json` or the target-specific `credentials_json_env`. SFTP supports password or private-key auth, and its `root_prefix` may be relative or absolute; `host_key_sha256` is required unless `insecure_ignore_host_key` is explicitly enabled.
 
 Path template tokens: `{task}` / `{task_name}` use the task display name, `{task_id}` uses the internal UUID, `{date}` uses UTC `YYYY-MM-DD`, and `{timestamp}` uses UTC `YYYYMMDDTHHMMSSZ`.
 
 Automatic remote cleanup only scans the stable directory derived from the task `object_prefix` under the target `root_prefix`, and only removes backup objects ending in `.zip` or `.zip.aes.json`.
 
-Remote restore uses the same saved S3/WebDAV targets and Nowledge Mem API sources:
+Remote restore uses the same saved S3/WebDAV/GCS/SFTP targets and Nowledge Mem API sources:
 
-- Scan requires a non-empty remote prefix; the app will not scan an entire bucket or WebDAV root.
+- Scan requires a non-empty remote prefix; the app will not scan an entire bucket or remote storage root.
 - Supported restore objects are portable `.zip` exports and encrypted `.zip.aes.json` packages created by this app.
 - Encrypted packages ask for the password only when starting the restore job; the password is not stored.
 - Import content flags and `mode` are sent to the Nowledge Mem Data Import API. The default mode is the API default; overwrite/clear-style modes are never selected by default.
@@ -169,7 +171,7 @@ The web UI follows the setup flow: sources, targets, schedules, export options, 
 
 - Go backend with `net/http`, embedded static assets, and a React UI.
 - Nowledge Mem backup and restore use `github.com/lib-x/nowledgemem-go`.
-- S3/R2 storage uses `github.com/fclairamb/afero-s3`; WebDAV uses `github.com/lib-x/aferodav` with this project's HTTP WebDAV adapter.
+- S3/R2 storage uses `github.com/fclairamb/afero-s3`; WebDAV uses `github.com/lib-x/aferodav` with this project's HTTP WebDAV adapter; GCS and SFTP use Afero's official experimental `gcsfs` and `sftpfs` packages.
 - Configuration and users are stored with ent ORM. SQLite is the default database; PostgreSQL and MySQL are optional.
 - Scheduled tasks run through `github.com/lib-x/timewheel` with calendar-time calculation in `internal/schedulecalc`.
 - Backup packages use ZIP, optional AES-GCM encryption, and scrypt key derivation.

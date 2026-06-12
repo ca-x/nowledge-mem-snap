@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,16 +19,22 @@ import (
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	aferos3 "github.com/fclairamb/afero-s3"
 	"github.com/lib-x/aferodav"
+	"github.com/pkg/sftp"
 	"github.com/spf13/afero"
+	"github.com/spf13/afero/gcsfs"
+	"github.com/spf13/afero/sftpfs"
+	"golang.org/x/crypto/ssh"
+	"google.golang.org/api/option"
 
 	"github.com/ca-x/nowledge-mem-snap/internal/archive"
 	"github.com/ca-x/nowledge-mem-snap/internal/config"
 )
 
 type Target struct {
-	Key  string
-	Name string
-	Fs   afero.Fs
+	Key   string
+	Name  string
+	Fs    afero.Fs
+	close func() error
 }
 
 type BackupObject struct {
@@ -64,6 +72,14 @@ func (f *Factory) Target(ctx context.Context, target config.TargetConfig) (Targe
 		fs, err = newS3FS(target.S3)
 	case "webdav":
 		fs, err = newWebDAVFS(ctx, target.WebDAV)
+	case "gcs":
+		fs, err = newGCSFS(ctx, target.GCS)
+	case "sftp":
+		var closeFn func() error
+		fs, closeFn, err = newSFTPFS(ctx, target.SFTP)
+		if err == nil {
+			return Target{Key: target.Key, Name: target.Name, Fs: fs, close: closeFn}, nil
+		}
 	default:
 		err = fmt.Errorf("unsupported target type %q", target.Type)
 	}
@@ -71,6 +87,13 @@ func (f *Factory) Target(ctx context.Context, target config.TargetConfig) (Targe
 		return Target{}, err
 	}
 	return Target{Key: target.Key, Name: target.Name, Fs: fs}, nil
+}
+
+func (t Target) Close() error {
+	if t.close == nil {
+		return nil
+	}
+	return t.close()
 }
 
 func Write(ctx context.Context, target Target, objectName string, data []byte) (int64, error) {
@@ -421,6 +444,113 @@ func newWebDAVFS(ctx context.Context, cfg config.WebDAVConfig) (afero.Fs, error)
 	return prefixFS{Fs: aferodav.New(webDAVFileSystem{client: client}, ctx), prefix: cfg.RootPrefix}, nil
 }
 
+func newGCSFS(ctx context.Context, cfg config.GCSConfig) (afero.Fs, error) {
+	opts := []option.ClientOption{}
+	if json := strings.TrimSpace(cfg.CredentialsJSON); json != "" {
+		opts = append(opts, option.WithCredentialsJSON([]byte(json)))
+	}
+	fs, err := gcsfs.NewGcsFS(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create GCS client: %w", err)
+	}
+	return prefixFS{Fs: fs, prefix: path.Join(cfg.BucketName, cfg.RootPrefix)}, nil
+}
+
+func newSFTPFS(ctx context.Context, cfg config.SFTPConfig) (afero.Fs, func() error, error) {
+	clientConfig, err := newSSHClientConfig(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
+	dialer := net.Dialer{Timeout: 30 * time.Second}
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("dial SFTP server: %w", err)
+	}
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, clientConfig)
+	if err != nil {
+		_ = conn.Close()
+		return nil, nil, fmt.Errorf("open SSH connection: %w", err)
+	}
+	sshClient := ssh.NewClient(sshConn, chans, reqs)
+	sftpClient, err := sftp.NewClient(sshClient)
+	if err != nil {
+		_ = sshClient.Close()
+		return nil, nil, fmt.Errorf("open SFTP client: %w", err)
+	}
+	closeFn := func() error {
+		err := sftpClient.Close()
+		if closeErr := sshClient.Close(); err == nil {
+			err = closeErr
+		}
+		return err
+	}
+	return prefixFS{Fs: sftpfs.New(sftpClient), prefix: cfg.RootPrefix, preserveLeadingSlash: true}, closeFn, nil
+}
+
+func newSSHClientConfig(cfg config.SFTPConfig) (*ssh.ClientConfig, error) {
+	auth := []ssh.AuthMethod{}
+	if key := normalizeMultilineSecret(cfg.PrivateKey); key != "" {
+		signer, err := parsePrivateKey(key, normalizeMultilineSecret(cfg.PrivateKeyPassphrase))
+		if err != nil {
+			return nil, err
+		}
+		auth = append(auth, ssh.PublicKeys(signer))
+	}
+	if password := cfg.Password; password != "" {
+		auth = append(auth, ssh.Password(password))
+	}
+	if len(auth) == 0 {
+		return nil, fmt.Errorf("SFTP password or private key is required")
+	}
+	return &ssh.ClientConfig{
+		User:            cfg.Username,
+		Auth:            auth,
+		HostKeyCallback: sftpHostKeyCallback(cfg),
+		Timeout:         30 * time.Second,
+	}, nil
+}
+
+func parsePrivateKey(key string, passphrase string) (ssh.Signer, error) {
+	if passphrase != "" {
+		signer, err := ssh.ParsePrivateKeyWithPassphrase([]byte(key), []byte(passphrase))
+		if err != nil {
+			return nil, fmt.Errorf("parse SFTP private key: %w", err)
+		}
+		return signer, nil
+	}
+	signer, err := ssh.ParsePrivateKey([]byte(key))
+	if err != nil {
+		return nil, fmt.Errorf("parse SFTP private key: %w", err)
+	}
+	return signer, nil
+}
+
+func sftpHostKeyCallback(cfg config.SFTPConfig) ssh.HostKeyCallback {
+	if cfg.InsecureIgnoreHostKey {
+		return ssh.InsecureIgnoreHostKey()
+	}
+	want := strings.TrimSpace(cfg.HostKeySHA256)
+	if want != "" && !strings.HasPrefix(want, "SHA256:") {
+		want = "SHA256:" + want
+	}
+	return func(_ string, _ net.Addr, key ssh.PublicKey) error {
+		got := ssh.FingerprintSHA256(key)
+		if got != want {
+			return fmt.Errorf("SFTP host key mismatch: got %s", got)
+		}
+		return nil
+	}
+}
+
+func normalizeMultilineSecret(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	return strings.ReplaceAll(value, `\n`, "\n")
+}
+
 func newWebDAVClient(cfg config.WebDAVConfig) (*webDAVHTTPClient, error) {
 	baseURL, err := url.Parse(cfg.URL)
 	if err != nil {
@@ -442,12 +572,21 @@ func newWebDAVClient(cfg config.WebDAVConfig) (*webDAVHTTPClient, error) {
 
 type prefixFS struct {
 	afero.Fs
-	prefix string
+	prefix               string
+	preserveLeadingSlash bool
 }
 
 func (fs prefixFS) withPrefix(name string) string {
 	cleaned, _ := cleanObjectPath(name)
-	prefix := strings.Trim(fs.prefix, "/")
+	prefix := strings.TrimSpace(fs.prefix)
+	if fs.preserveLeadingSlash {
+		prefix = path.Clean(prefix)
+		if prefix == "." {
+			prefix = ""
+		}
+	} else {
+		prefix = strings.Trim(prefix, "/")
+	}
 	if prefix == "" {
 		return cleaned
 	}

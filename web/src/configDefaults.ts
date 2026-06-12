@@ -5,11 +5,13 @@ import type {
   ExportConfig,
   ExportFlag,
   ExportOption,
+  GCSConfig,
   Retention,
   S3Config,
   Schedule,
   Source,
   SourceRoot,
+  SFTPConfig,
   Target,
   Task,
   WebDAVConfig
@@ -91,6 +93,26 @@ export function defaultTarget(index: number, t: Translate): Target {
       username: '',
       password: '',
       password_env: `NMEM_SNAP_TARGET_TARGET_${index + 1}_WEBDAV_PASSWORD`
+    },
+    gcs: {
+      bucket_name: '',
+      root_prefix: '',
+      credentials_json: '',
+      credentials_json_env: `NMEM_SNAP_TARGET_TARGET_${index + 1}_GCS_CREDENTIALS_JSON`
+    },
+    sftp: {
+      host: '',
+      port: 22,
+      root_prefix: '',
+      username: '',
+      password: '',
+      password_env: `NMEM_SNAP_TARGET_TARGET_${index + 1}_SFTP_PASSWORD`,
+      private_key: '',
+      private_key_env: `NMEM_SNAP_TARGET_TARGET_${index + 1}_SFTP_PRIVATE_KEY`,
+      private_key_passphrase: '',
+      private_key_passphrase_env: `NMEM_SNAP_TARGET_TARGET_${index + 1}_SFTP_PRIVATE_KEY_PASSPHRASE`,
+      host_key_sha256: '',
+      insecure_ignore_host_key: false
     }
   };
 }
@@ -197,6 +219,27 @@ export function defaultWebDAV(target: Target): WebDAVConfig {
   return target.webdav ?? { url: '', root_prefix: '', username: '', password: '', password_env: '' };
 }
 
+export function defaultGCS(target: Target): GCSConfig {
+  return target.gcs ?? { bucket_name: '', root_prefix: '', credentials_json: '', credentials_json_env: '' };
+}
+
+export function defaultSFTP(target: Target): SFTPConfig {
+  return target.sftp ?? {
+    host: '',
+    port: 22,
+    root_prefix: '',
+    username: '',
+    password: '',
+    password_env: '',
+    private_key: '',
+    private_key_env: '',
+    private_key_passphrase: '',
+    private_key_passphrase_env: '',
+    host_key_sha256: '',
+    insecure_ignore_host_key: false
+  };
+}
+
 export function cloneSource(source: Source): Source {
   return {
     ...source,
@@ -209,7 +252,9 @@ export function cloneTarget(target: Target): Target {
   return {
     ...target,
     s3: target.s3 ? { ...target.s3 } : undefined,
-    webdav: target.webdav ? { ...target.webdav } : undefined
+    webdav: target.webdav ? { ...target.webdav } : undefined,
+    gcs: target.gcs ? { ...target.gcs } : undefined,
+    sftp: target.sftp ? { ...target.sftp } : undefined
   };
 }
 

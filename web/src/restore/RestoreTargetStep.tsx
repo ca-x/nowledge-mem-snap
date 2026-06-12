@@ -30,7 +30,7 @@ export function RestoreTargetStep({ draft, targets, onDraft }: {
             <div>
               <h3>{target.name}</h3>
               <p>{target.type.toUpperCase()}</p>
-              <code>{target.type === 's3' ? target.s3?.root_prefix || target.s3?.bucket_name || target.key : target.webdav?.root_prefix || target.webdav?.url || target.key}</code>
+              <code>{targetSummary(target)}</code>
             </div>
             {draft.targetKey === target.key && <CheckCircle2 size={20} />}
           </Card>
@@ -38,4 +38,19 @@ export function RestoreTargetStep({ draft, targets, onDraft }: {
       ))}
     </div>
   );
+}
+
+function targetSummary(target: Target) {
+  switch (target.type) {
+    case 's3':
+      return target.s3?.root_prefix || target.s3?.bucket_name || target.key;
+    case 'webdav':
+      return target.webdav?.root_prefix || target.webdav?.url || target.key;
+    case 'gcs':
+      return target.gcs?.root_prefix || target.gcs?.bucket_name || target.key;
+    case 'sftp':
+      return target.sftp?.root_prefix || target.sftp?.host || target.key;
+    default:
+      return target.key;
+  }
 }

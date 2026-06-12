@@ -104,6 +104,7 @@ func (m *Manager) ListObjects(ctx context.Context, target config.TargetConfig, p
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = remoteTarget.Close() }()
 	return storage.ListBackupObjects(ctx, remoteTarget, prefix)
 }
 
@@ -166,6 +167,11 @@ func (m *Manager) run(jobID string, req StartRequest) {
 		m.failWithLogger(jobID, err, jobLogger)
 		return
 	}
+	defer func() {
+		if closeErr := remoteTarget.Close(); closeErr != nil {
+			jobLogger.Warn("restore target close failed", "error", closeErr)
+		}
+	}()
 	data, err := storage.Read(ctx, remoteTarget, objectName)
 	if err != nil {
 		m.failWithLogger(jobID, err, jobLogger)

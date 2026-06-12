@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Button, Card, Cursor, Input, Tabs, Tooltip } from 'animal-island-ui';
+import { Button, Card, Cursor, Input, Modal, Tabs, Tooltip } from 'animal-island-ui';
 import 'animal-island-ui/style';
 import {
+  AlertTriangle,
   ArchiveRestore,
   CalendarClock,
   ChevronDown,
@@ -80,6 +81,16 @@ import type {
   VersionInfo
 } from './types';
 import './styles.css';
+
+type DeletableKind = 'sources' | 'targets' | 'schedules' | 'export_options' | 'backup_strategies' | 'tasks';
+
+type DeleteTarget = {
+  itemLabel: string;
+  itemName: string;
+  blockers: string[];
+  nextConfig: Config;
+  successMessage: string;
+};
 
 function Root() {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
@@ -230,6 +241,7 @@ function Dashboard() {
   const [exportOptionEditor, setExportOptionEditor] = useState<Editor<ExportOption> | null>(null);
   const [backupStrategyEditor, setBackupStrategyEditor] = useState<Editor<BackupStrategy> | null>(null);
   const [taskEditor, setTaskEditor] = useState<Editor<Task> | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('sources');
@@ -271,8 +283,10 @@ function Dashboard() {
       const saved = await api<Config>('/api/config', { method: 'PUT', body: JSON.stringify(next) });
       setCfg(normalizeConfig(saved, t));
       setMessage(successMessage);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t('saveFailed'));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -283,8 +297,7 @@ function Dashboard() {
     const sources = [...cfg.sources];
     if (editor.index < 0) sources.push(editor.value);
     else sources[editor.index] = editor.value;
-    await persist({ ...cfg, sources }, t('sourceSaved'));
-    setSourceEditor(null);
+    if (await persist({ ...cfg, sources }, t('sourceSaved'))) setSourceEditor(null);
   };
 
   const upsertTarget = async (editor: Editor<Target>) => {
@@ -292,8 +305,7 @@ function Dashboard() {
     const targets = [...cfg.targets];
     if (editor.index < 0) targets.push(editor.value);
     else targets[editor.index] = editor.value;
-    await persist({ ...cfg, targets }, t('targetSaved'));
-    setTargetEditor(null);
+    if (await persist({ ...cfg, targets }, t('targetSaved'))) setTargetEditor(null);
   };
 
   const upsertSchedule = async (editor: Editor<Schedule>) => {
@@ -301,8 +313,7 @@ function Dashboard() {
     const schedules = [...cfg.schedules];
     if (editor.index < 0) schedules.push(editor.value);
     else schedules[editor.index] = editor.value;
-    await persist({ ...cfg, schedules }, t('scheduleSaved'));
-    setScheduleEditor(null);
+    if (await persist({ ...cfg, schedules }, t('scheduleSaved'))) setScheduleEditor(null);
   };
 
   const upsertExportOption = async (editor: Editor<ExportOption>) => {
@@ -310,8 +321,7 @@ function Dashboard() {
     const export_options = [...cfg.export_options];
     if (editor.index < 0) export_options.push(editor.value);
     else export_options[editor.index] = editor.value;
-    await persist({ ...cfg, export_options }, t('exportOptionSaved'));
-    setExportOptionEditor(null);
+    if (await persist({ ...cfg, export_options }, t('exportOptionSaved'))) setExportOptionEditor(null);
   };
 
   const upsertBackupStrategy = async (editor: Editor<BackupStrategy>) => {
@@ -319,8 +329,7 @@ function Dashboard() {
     const backup_strategies = [...cfg.backup_strategies];
     if (editor.index < 0) backup_strategies.push(editor.value);
     else backup_strategies[editor.index] = editor.value;
-    await persist({ ...cfg, backup_strategies }, t('backupStrategySaved'));
-    setBackupStrategyEditor(null);
+    if (await persist({ ...cfg, backup_strategies }, t('backupStrategySaved'))) setBackupStrategyEditor(null);
   };
 
   const upsertTask = async (editor: Editor<Task>) => {
@@ -328,8 +337,7 @@ function Dashboard() {
     const tasks = [...cfg.tasks];
     if (editor.index < 0) tasks.push(editor.value);
     else tasks[editor.index] = editor.value;
-    await persist({ ...cfg, tasks }, t('taskSaved'));
-    setTaskEditor(null);
+    if (await persist({ ...cfg, tasks }, t('taskSaved'))) setTaskEditor(null);
   };
 
   const saveSettings = async (next: Config) => {
@@ -357,10 +365,95 @@ function Dashboard() {
     window.location.href = appPath(`/auth/oidc/start?mode=link&next=${encodeURIComponent(currentAppPath())}`);
   };
 
-  const removeItem = async (kind: 'sources' | 'targets' | 'schedules' | 'export_options' | 'backup_strategies' | 'tasks', index: number, successMessage: string) => {
+  const taskName = (task: Task) => task.name || task.key;
+
+  const requestDelete = (kind: DeletableKind, index: number) => {
     if (!cfg) return;
-    const next = { ...cfg, [kind]: cfg[kind].filter((_, i) => i !== index) };
-    await persist(next, successMessage);
+    switch (kind) {
+      case 'sources': {
+        const item = cfg.sources[index];
+        if (!item) return;
+        setDeleteTarget({
+          itemLabel: t('source'),
+          itemName: item.name || item.key,
+          blockers: cfg.tasks.filter((task) => task.source_key === item.key).map(taskName),
+          nextConfig: { ...cfg, sources: cfg.sources.filter((_, i) => i !== index) },
+          successMessage: t('sourceDeleted')
+        });
+        break;
+      }
+      case 'targets': {
+        const item = cfg.targets[index];
+        if (!item) return;
+        setDeleteTarget({
+          itemLabel: t('target'),
+          itemName: item.name || item.key,
+          blockers: cfg.tasks.filter((task) => task.target_keys.includes(item.key)).map(taskName),
+          nextConfig: { ...cfg, targets: cfg.targets.filter((_, i) => i !== index) },
+          successMessage: t('targetDeleted')
+        });
+        break;
+      }
+      case 'schedules': {
+        const item = cfg.schedules[index];
+        if (!item) return;
+        setDeleteTarget({
+          itemLabel: t('schedule'),
+          itemName: item.name || item.key,
+          blockers: cfg.tasks.filter((task) => task.schedule_key === item.key).map(taskName),
+          nextConfig: { ...cfg, schedules: cfg.schedules.filter((_, i) => i !== index) },
+          successMessage: t('scheduleDeleted')
+        });
+        break;
+      }
+      case 'export_options': {
+        const item = cfg.export_options[index];
+        if (!item) return;
+        setDeleteTarget({
+          itemLabel: t('exportOption'),
+          itemName: item.name || item.key,
+          blockers: cfg.tasks.filter((task) => task.export_option_key === item.key).map(taskName),
+          nextConfig: { ...cfg, export_options: cfg.export_options.filter((_, i) => i !== index) },
+          successMessage: t('exportOptionDeleted')
+        });
+        break;
+      }
+      case 'backup_strategies': {
+        const item = cfg.backup_strategies[index];
+        if (!item) return;
+        setDeleteTarget({
+          itemLabel: t('backupStrategy'),
+          itemName: item.name || item.key,
+          blockers: cfg.tasks.filter((task) => task.backup_strategy_key === item.key).map(taskName),
+          nextConfig: { ...cfg, backup_strategies: cfg.backup_strategies.filter((_, i) => i !== index) },
+          successMessage: t('backupStrategyDeleted')
+        });
+        break;
+      }
+      case 'tasks': {
+        const item = cfg.tasks[index];
+        if (!item) return;
+        setDeleteTarget({
+          itemLabel: t('task'),
+          itemName: item.name || item.key,
+          blockers: [],
+          nextConfig: { ...cfg, tasks: cfg.tasks.filter((_, i) => i !== index) },
+          successMessage: t('taskDeleted')
+        });
+        break;
+      }
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget || deleteTarget.blockers.length > 0) return;
+    if (await persist(deleteTarget.nextConfig, deleteTarget.successMessage)) setDeleteTarget(null);
+  };
+
+  const goToTasksFromDelete = () => {
+    setActiveTab('tasks');
+    setDeleteTarget(null);
+    window.scrollTo({ top: 0 });
   };
 
   const runTask = async (taskKey: string) => {
@@ -398,7 +491,7 @@ function Dashboard() {
           roots={roots}
           onAdd={() => setSourceEditor({ index: -1, value: defaultSource(cfg.sources.length, roots, t) })}
           onEdit={(source, index) => setSourceEditor({ index, value: cloneSource(source) })}
-          onDelete={(index) => removeItem('sources', index, t('sourceDeleted'))}
+          onDelete={(index) => requestDelete('sources', index)}
         />
       )
     },
@@ -410,7 +503,7 @@ function Dashboard() {
           targets={cfg.targets}
           onAdd={() => setTargetEditor({ index: -1, value: defaultTarget(cfg.targets.length, t) })}
           onEdit={(target, index) => setTargetEditor({ index, value: cloneTarget(target) })}
-          onDelete={(index) => removeItem('targets', index, t('targetDeleted'))}
+          onDelete={(index) => requestDelete('targets', index)}
         />
       )
     },
@@ -422,7 +515,7 @@ function Dashboard() {
           schedules={cfg.schedules}
           onAdd={() => setScheduleEditor({ index: -1, value: defaultSchedule(cfg.schedules.length, t) })}
           onEdit={(schedule, index) => setScheduleEditor({ index, value: { ...schedule } })}
-          onDelete={(index) => removeItem('schedules', index, t('scheduleDeleted'))}
+          onDelete={(index) => requestDelete('schedules', index)}
         />
       )
     },
@@ -434,7 +527,7 @@ function Dashboard() {
           options={cfg.export_options}
           onAdd={() => setExportOptionEditor({ index: -1, value: defaultExportOption(cfg.export_options.length, t) })}
           onEdit={(option, index) => setExportOptionEditor({ index, value: cloneExportOption(option) })}
-          onDelete={(index) => removeItem('export_options', index, t('exportOptionDeleted'))}
+          onDelete={(index) => requestDelete('export_options', index)}
         />
       )
     },
@@ -446,7 +539,7 @@ function Dashboard() {
           strategies={cfg.backup_strategies}
           onAdd={() => setBackupStrategyEditor({ index: -1, value: defaultBackupStrategy(cfg.backup_strategies.length, t) })}
           onEdit={(strategy, index) => setBackupStrategyEditor({ index, value: cloneBackupStrategy(strategy) })}
-          onDelete={(index) => removeItem('backup_strategies', index, t('backupStrategyDeleted'))}
+          onDelete={(index) => requestDelete('backup_strategies', index)}
         />
       )
     },
@@ -465,7 +558,7 @@ function Dashboard() {
           locale={localeForLang(lang)}
           onAdd={() => setTaskEditor({ index: -1, value: defaultTask(cfg, t) })}
           onEdit={(task, index) => setTaskEditor({ index, value: cloneTask(task) })}
-          onDelete={(index) => removeItem('tasks', index, t('taskDeleted'))}
+          onDelete={(index) => requestDelete('tasks', index)}
           onRun={runTask}
         />
       )
@@ -600,7 +693,66 @@ function Dashboard() {
         oidcEnabled={authOptions.oidc}
         onLinkOIDC={linkOIDC}
       />
+      <DeleteConfigModal
+        target={deleteTarget}
+        saving={saving}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        onGoTasks={goToTasksFromDelete}
+      />
     </div>
+  );
+}
+
+function DeleteConfigModal({ target, saving, onCancel, onConfirm, onGoTasks }: {
+  target: DeleteTarget | null;
+  saving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onGoTasks: () => void;
+}) {
+  const { t } = useI18n();
+  if (!target) return null;
+  const blocked = target.blockers.length > 0;
+  const title = (blocked ? t('deleteBlockedTitle') : t('deleteItemTitle')).replace('{kind}', target.itemLabel);
+  const message = (blocked ? t('deleteBlockedMessage') : t('deleteItemConfirm'))
+    .replace('{kind}', target.itemLabel)
+    .replace('{name}', target.itemName);
+
+  return (
+    <Modal
+      open
+      title={title}
+      typewriter={false}
+      width={540}
+      onClose={onCancel}
+      footer={(
+        <div className="modal-footer">
+          <Button type="default" onClick={onCancel}>{t('cancel')}</Button>
+          {blocked ? (
+            <Button type="primary" onClick={onGoTasks}>{t('goToTasks')}</Button>
+          ) : (
+            <Button type="default" danger loading={saving} onClick={onConfirm}>{t('confirmDelete')}</Button>
+          )}
+        </div>
+      )}
+    >
+      <div className="delete-confirm">
+        <div className={`delete-warning ${blocked ? 'blocked' : ''}`}>
+          <AlertTriangle size={22} />
+          <div>
+            <strong>{message}</strong>
+            <p>{blocked ? t('deleteBlockedTip') : t('deleteItemTip')}</p>
+          </div>
+        </div>
+        {blocked && (
+          <div className="reference-list">
+            <span>{t('referencingTasks')}</span>
+            {target.blockers.map((name, index) => <code key={`${name}-${index}`}>{name}</code>)}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 

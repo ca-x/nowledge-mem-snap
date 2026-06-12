@@ -426,6 +426,7 @@ func (s *Server) handleRestoreBrowse(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	defer func() { _ = remoteTarget.Close() }()
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
 	browse, err := storage.BrowseBackupDirectories(ctx, remoteTarget, req.Prefix)

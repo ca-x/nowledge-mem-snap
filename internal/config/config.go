@@ -177,6 +177,8 @@ type TargetConfig struct {
 	Type    string       `json:"type"`
 	S3      S3Config     `json:"s3,omitempty"`
 	WebDAV  WebDAVConfig `json:"webdav,omitempty"`
+	GCS     GCSConfig    `json:"gcs,omitempty"`
+	SFTP    SFTPConfig   `json:"sftp,omitempty"`
 }
 
 type S3Config struct {
@@ -196,6 +198,28 @@ type WebDAVConfig struct {
 	Username    string `json:"username"`
 	Password    string `json:"password,omitempty"`
 	PasswordEnv string `json:"password_env,omitempty"`
+}
+
+type GCSConfig struct {
+	BucketName         string `json:"bucket_name"`
+	RootPrefix         string `json:"root_prefix"`
+	CredentialsJSON    string `json:"credentials_json,omitempty"`
+	CredentialsJSONEnv string `json:"credentials_json_env,omitempty"`
+}
+
+type SFTPConfig struct {
+	Host                    string `json:"host"`
+	Port                    int    `json:"port"`
+	RootPrefix              string `json:"root_prefix"`
+	Username                string `json:"username"`
+	Password                string `json:"password,omitempty"`
+	PasswordEnv             string `json:"password_env,omitempty"`
+	PrivateKey              string `json:"private_key,omitempty"`
+	PrivateKeyEnv           string `json:"private_key_env,omitempty"`
+	PrivateKeyPassphrase    string `json:"private_key_passphrase,omitempty"`
+	PrivateKeyPassphraseEnv string `json:"private_key_passphrase_env,omitempty"`
+	HostKeySHA256           string `json:"host_key_sha256,omitempty"`
+	InsecureIgnoreHostKey   bool   `json:"insecure_ignore_host_key,omitempty"`
 }
 
 type TaskConfig struct {
@@ -1368,6 +1392,19 @@ func Normalize(cfg Config) Config {
 		cfg.Targets[i].S3.Region = defaultString(strings.TrimSpace(cfg.Targets[i].S3.Region), "auto")
 		cfg.Targets[i].S3.SecretAccessKeyEnv = defaultString(strings.TrimSpace(cfg.Targets[i].S3.SecretAccessKeyEnv), targetEnv(cfg.Targets[i].Key, "S3_SECRET_ACCESS_KEY"))
 		cfg.Targets[i].WebDAV.PasswordEnv = defaultString(strings.TrimSpace(cfg.Targets[i].WebDAV.PasswordEnv), targetEnv(cfg.Targets[i].Key, "WEBDAV_PASSWORD"))
+		cfg.Targets[i].GCS.BucketName = strings.TrimSpace(cfg.Targets[i].GCS.BucketName)
+		cfg.Targets[i].GCS.RootPrefix = strings.TrimSpace(cfg.Targets[i].GCS.RootPrefix)
+		cfg.Targets[i].GCS.CredentialsJSONEnv = defaultString(strings.TrimSpace(cfg.Targets[i].GCS.CredentialsJSONEnv), targetEnv(cfg.Targets[i].Key, "GCS_CREDENTIALS_JSON"))
+		cfg.Targets[i].SFTP.Host = strings.TrimSpace(cfg.Targets[i].SFTP.Host)
+		if cfg.Targets[i].SFTP.Port == 0 {
+			cfg.Targets[i].SFTP.Port = 22
+		}
+		cfg.Targets[i].SFTP.RootPrefix = strings.TrimSpace(cfg.Targets[i].SFTP.RootPrefix)
+		cfg.Targets[i].SFTP.Username = strings.TrimSpace(cfg.Targets[i].SFTP.Username)
+		cfg.Targets[i].SFTP.PasswordEnv = defaultString(strings.TrimSpace(cfg.Targets[i].SFTP.PasswordEnv), targetEnv(cfg.Targets[i].Key, "SFTP_PASSWORD"))
+		cfg.Targets[i].SFTP.PrivateKeyEnv = defaultString(strings.TrimSpace(cfg.Targets[i].SFTP.PrivateKeyEnv), targetEnv(cfg.Targets[i].Key, "SFTP_PRIVATE_KEY"))
+		cfg.Targets[i].SFTP.PrivateKeyPassphraseEnv = defaultString(strings.TrimSpace(cfg.Targets[i].SFTP.PrivateKeyPassphraseEnv), targetEnv(cfg.Targets[i].Key, "SFTP_PRIVATE_KEY_PASSPHRASE"))
+		cfg.Targets[i].SFTP.HostKeySHA256 = strings.TrimSpace(cfg.Targets[i].SFTP.HostKeySHA256)
 	}
 	if len(cfg.ExportOptions) == 0 {
 		cfg.ExportOptions = []ExportOptionConfig{
@@ -1517,6 +1554,20 @@ func MergeTargetSecrets(incoming TargetConfig, existing TargetConfig) TargetConf
 	if incoming.Type == "webdav" && incoming.WebDAV.Password == "" {
 		incoming.WebDAV.Password = existing.WebDAV.Password
 	}
+	if incoming.Type == "gcs" && incoming.GCS.CredentialsJSON == "" {
+		incoming.GCS.CredentialsJSON = existing.GCS.CredentialsJSON
+	}
+	if incoming.Type == "sftp" {
+		if incoming.SFTP.Password == "" {
+			incoming.SFTP.Password = existing.SFTP.Password
+		}
+		if incoming.SFTP.PrivateKey == "" {
+			incoming.SFTP.PrivateKey = existing.SFTP.PrivateKey
+		}
+		if incoming.SFTP.PrivateKeyPassphrase == "" {
+			incoming.SFTP.PrivateKeyPassphrase = existing.SFTP.PrivateKeyPassphrase
+		}
+	}
 	return incoming
 }
 
@@ -1589,6 +1640,20 @@ func ApplyEnv(cfg Config) Config {
 			if cfg.Targets[i].WebDAV.Password == "" {
 				cfg.Targets[i].WebDAV.Password = os.Getenv(cfg.Targets[i].WebDAV.PasswordEnv)
 			}
+		case "gcs":
+			if cfg.Targets[i].GCS.CredentialsJSON == "" {
+				cfg.Targets[i].GCS.CredentialsJSON = os.Getenv(cfg.Targets[i].GCS.CredentialsJSONEnv)
+			}
+		case "sftp":
+			if cfg.Targets[i].SFTP.Password == "" {
+				cfg.Targets[i].SFTP.Password = os.Getenv(cfg.Targets[i].SFTP.PasswordEnv)
+			}
+			if cfg.Targets[i].SFTP.PrivateKey == "" {
+				cfg.Targets[i].SFTP.PrivateKey = os.Getenv(cfg.Targets[i].SFTP.PrivateKeyEnv)
+			}
+			if cfg.Targets[i].SFTP.PrivateKeyPassphrase == "" {
+				cfg.Targets[i].SFTP.PrivateKeyPassphrase = os.Getenv(cfg.Targets[i].SFTP.PrivateKeyPassphraseEnv)
+			}
 		}
 	}
 	for i := range cfg.Tasks {
@@ -1608,6 +1673,10 @@ func Redacted(cfg Config) Config {
 	for i := range cfg.Targets {
 		cfg.Targets[i].S3.SecretAccessKey = ""
 		cfg.Targets[i].WebDAV.Password = ""
+		cfg.Targets[i].GCS.CredentialsJSON = ""
+		cfg.Targets[i].SFTP.Password = ""
+		cfg.Targets[i].SFTP.PrivateKey = ""
+		cfg.Targets[i].SFTP.PrivateKeyPassphrase = ""
 	}
 	for i := range cfg.Tasks {
 		cfg.Tasks[i].Encryption.Password = ""
@@ -1816,8 +1885,33 @@ func ValidateTargetConfig(target TargetConfig) error {
 		if err := validateHTTPURL(target.WebDAV.URL); err != nil {
 			return fmt.Errorf("target %q webdav url: %w", target.Key, err)
 		}
+	case "gcs":
+		if strings.TrimSpace(target.GCS.BucketName) == "" {
+			return fmt.Errorf("target %q gcs bucket_name is required", target.Key)
+		}
+	case "sftp":
+		if strings.TrimSpace(target.SFTP.Host) == "" {
+			return fmt.Errorf("target %q sftp host is required", target.Key)
+		}
+		if strings.ContainsAny(target.SFTP.Host, " \t\r\n/") {
+			return fmt.Errorf("target %q sftp host must be a hostname or IP address", target.Key)
+		}
+		if target.SFTP.Port < 1 || target.SFTP.Port > 65535 {
+			return fmt.Errorf("target %q sftp port must be between 1 and 65535", target.Key)
+		}
+		if strings.TrimSpace(target.SFTP.Username) == "" {
+			return fmt.Errorf("target %q sftp username is required", target.Key)
+		}
+		hasPassword := strings.TrimSpace(target.SFTP.Password) != "" || strings.TrimSpace(target.SFTP.PasswordEnv) != ""
+		hasPrivateKey := strings.TrimSpace(target.SFTP.PrivateKey) != "" || strings.TrimSpace(target.SFTP.PrivateKeyEnv) != ""
+		if !hasPassword && !hasPrivateKey {
+			return fmt.Errorf("target %q sftp password or private_key is required", target.Key)
+		}
+		if !target.SFTP.InsecureIgnoreHostKey && strings.TrimSpace(target.SFTP.HostKeySHA256) == "" {
+			return fmt.Errorf("target %q sftp host_key_sha256 is required unless insecure_ignore_host_key is enabled", target.Key)
+		}
 	default:
-		return fmt.Errorf("target %q type must be s3 or webdav", target.Key)
+		return fmt.Errorf("target %q type must be s3, webdav, gcs, or sftp", target.Key)
 	}
 	return nil
 }
