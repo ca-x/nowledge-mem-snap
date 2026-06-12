@@ -81,6 +81,9 @@ func (s *Store) List() ([]Run, error) {
 		if err := json.Unmarshal([]byte(row.Payload), &run); err != nil {
 			return nil, err
 		}
+		if run.Targets == nil {
+			run.Targets = []TargetResult{}
+		}
 		runs = append(runs, run)
 	}
 	return runs, nil

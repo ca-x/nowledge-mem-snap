@@ -155,7 +155,7 @@ export type Run = {
   encrypted: boolean;
   size_bytes: number;
   started_at: string;
-  targets: Array<{ target_name: string; status: string; bytes: number; retention_deleted?: number; error?: string }>;
+  targets?: Array<{ target_name: string; status: string; bytes: number; retention_deleted?: number; error?: string }> | null;
 };
 
 export type SourceRoot = {
