@@ -13,7 +13,7 @@ require (
 	github.com/lib-x/aferodav v0.2.0
 	github.com/lib-x/entsqlite v0.2.2
 	github.com/lib-x/nowledgemem-go v0.4.1
-	github.com/lib-x/timewheel v0.3.0
+	github.com/lib-x/timewheel v0.4.0
 	github.com/lib/pq v1.12.3
 	github.com/spf13/afero v1.15.0
 	golang.org/x/crypto v0.51.0
