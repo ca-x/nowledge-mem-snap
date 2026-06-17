@@ -12,7 +12,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/lib-x/aferodav v0.2.0
 	github.com/lib-x/entsqlite v0.2.2
-	github.com/lib-x/nowledgemem-go v0.4.1
+	github.com/lib-x/nowledgemem-go v0.5.0
 	github.com/lib-x/timewheel v0.4.0
 	github.com/lib/pq v1.12.3
 	github.com/pkg/sftp v1.13.8
