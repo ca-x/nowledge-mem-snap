@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +27,8 @@ type Runner struct {
 	logger   *slog.Logger
 }
 
+var ErrInvalidTargetSelection = errors.New("invalid target selection")
+
 func NewRunner(cfg config.Config, historyStore *history.Store, logger *slog.Logger) *Runner {
 	return &Runner{
 		cfg:      cfg,
@@ -41,6 +45,18 @@ func (r *Runner) RunTask(ctx context.Context, taskKey string) (history.Run, erro
 		return history.Run{}, fmt.Errorf("task %q was not found", taskKey)
 	}
 	return r.run(ctx, task, "manual")
+}
+
+func (r *Runner) RunTaskWithTargets(ctx context.Context, taskKey string, targetKeys []string) (history.Run, error) {
+	task, ok := r.cfg.Task(taskKey)
+	if !ok {
+		return history.Run{}, fmt.Errorf("task %q was not found", taskKey)
+	}
+	selectedTask, err := taskWithSelectedTargets(task, targetKeys)
+	if err != nil {
+		return history.Run{}, err
+	}
+	return r.run(ctx, selectedTask, "manual")
 }
 
 func (r *Runner) RunScheduledTask(ctx context.Context, task config.TaskConfig) (history.Run, error) {
@@ -220,6 +236,40 @@ func (r *Runner) targetsForTask(task config.TaskConfig) []config.TargetConfig {
 		}
 	}
 	return targets
+}
+
+func taskWithSelectedTargets(task config.TaskConfig, selectedTargetKeys []string) (config.TaskConfig, error) {
+	allowed := make(map[string]struct{}, len(task.TargetKeys))
+	for _, key := range task.TargetKeys {
+		allowed[key] = struct{}{}
+	}
+
+	targetKeys := make([]string, 0, len(selectedTargetKeys))
+	seen := make(map[string]struct{}, len(selectedTargetKeys))
+	for _, key := range selectedTargetKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, ok := allowed[key]; !ok {
+			return config.TaskConfig{}, fmt.Errorf("%w: target %q is not configured for task %q", ErrInvalidTargetSelection, key, task.Key)
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		targetKeys = append(targetKeys, key)
+	}
+	if len(targetKeys) == 0 {
+		return config.TaskConfig{}, fmt.Errorf("%w: at least one target must be selected", ErrInvalidTargetSelection)
+	}
+
+	task.TargetKeys = targetKeys
+	return task, nil
+}
+
+func IsInvalidTargetSelection(err error) bool {
+	return errors.Is(err, ErrInvalidTargetSelection)
 }
 
 func newRunID() string {

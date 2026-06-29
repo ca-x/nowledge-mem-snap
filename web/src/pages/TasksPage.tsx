@@ -18,7 +18,7 @@ export function TasksPage({ tasks, sources, targets, schedules, exportOptions, b
   onAdd: () => void;
   onEdit: (task: Task, index: number) => void;
   onDelete: (index: number) => void;
-  onRun: (key: string) => void;
+  onRun: (task: Task) => void;
 }) {
   const { t } = useI18n();
   const exportName = (key: string) => exportOptions.find((option) => option.key === key)?.name ?? key;
@@ -43,7 +43,7 @@ export function TasksPage({ tasks, sources, targets, schedules, exportOptions, b
                 <p>{t('backupStrategy')}: {selectedStrategy?.name ?? task.backup_strategy_key} · {retentionLabel(selectedStrategy?.retention, t)}</p>
                 <p>{task.encryption.enabled ? t('encryptedPackage') : t('plainPortableZip')}</p>
                 <div className="card-actions">
-                  <Button type="primary" icon={<Play size={16} />} onClick={() => onRun(task.key)}>{t('runNow')}</Button>
+                  <Button type="primary" icon={<Play size={16} />} onClick={() => onRun(task)}>{t('runNow')}</Button>
                   <Button type="default" icon={<Pencil size={16} />} onClick={() => onEdit(task, index)}>{t('edit')}</Button>
                   <Button type="default" danger icon={<Trash2 size={16} />} onClick={() => onDelete(index)}>{t('delete')}</Button>
                 </div>

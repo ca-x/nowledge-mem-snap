@@ -821,6 +821,103 @@ code {
   margin-top: 0;
 }
 
+.run-target-form {
+  display: grid;
+  gap: 14px;
+}
+
+.run-target-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 2px dashed rgba(159, 146, 125, 0.42);
+  border-radius: 14px;
+  background: rgba(247, 243, 223, 0.74);
+  color: var(--animal-text);
+  font-weight: 900;
+}
+
+.run-target-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-target-summary strong {
+  flex: 0 0 auto;
+  color: var(--animal-primary-active);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-target-field {
+  display: grid;
+  gap: 8px;
+  color: var(--animal-text);
+  font-weight: 800;
+}
+
+.run-target-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.run-target-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 2px solid rgba(196, 184, 158, 0.55);
+  border-radius: 12px;
+  background: rgba(255, 252, 238, 0.9);
+  box-shadow: var(--animal-shadow-sm);
+  transition: border-color 0.2s var(--animal-ease), box-shadow 0.2s var(--animal-ease), transform 0.2s var(--animal-ease);
+}
+
+.run-target-option:not(.disabled):hover {
+  border-color: var(--animal-primary);
+  box-shadow: var(--animal-shadow-base);
+  transform: translateY(-1px);
+}
+
+.run-target-option.disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.run-target-option input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.run-target-option-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.run-target-option-body strong,
+.run-target-option-body span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-target-option-body strong {
+  color: var(--animal-text);
+  line-height: 1.25;
+}
+
+.run-target-option-body span {
+  color: var(--animal-text-muted);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
 .test-download-choice {
   flex: 0 1 auto;
 }

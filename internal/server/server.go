@@ -368,7 +368,8 @@ func (s *Server) handleRunBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		TaskKey string `json:"task_key"`
+		TaskKey    string    `json:"task_key"`
+		TargetKeys *[]string `json:"target_keys,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -385,8 +386,18 @@ func (s *Server) handleRunBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	historyStore := history.NewStoreWithRetention(s.store.Client(), claims.Tenant, cfg.HistoryLimit, cfg.HistoryRetentionDays)
-	run, err := backup.NewRunner(cfg, historyStore, s.logger).RunTask(r.Context(), req.TaskKey)
+	runner := backup.NewRunner(cfg, historyStore, s.logger)
+	var run history.Run
+	if req.TargetKeys == nil {
+		run, err = runner.RunTask(r.Context(), req.TaskKey)
+	} else {
+		run, err = runner.RunTaskWithTargets(r.Context(), req.TaskKey, *req.TargetKeys)
+	}
 	if err != nil {
+		if backup.IsInvalidTargetSelection(err) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeJSON(w, http.StatusAccepted, map[string]any{"run": run, "error": err.Error()})
 		return
 	}

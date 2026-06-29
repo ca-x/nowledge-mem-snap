@@ -55,6 +55,7 @@ import { ScheduleModal } from './modals/ScheduleModal';
 import { SourceModal } from './modals/SourceModal';
 import { TargetModal } from './modals/TargetModal';
 import { TaskModal } from './modals/TaskModal';
+import { RunTaskModal, defaultRunTargetKeys, type RunTaskEditor } from './modals/RunTaskModal';
 import { BackupStrategiesPage } from './pages/BackupStrategiesPage';
 import { ExportOptionsPage } from './pages/ExportOptionsPage';
 import { RunsPage } from './pages/RunsPage';
@@ -235,12 +236,14 @@ function Dashboard() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [runningBackup, setRunningBackup] = useState(false);
   const [sourceEditor, setSourceEditor] = useState<Editor<Source> | null>(null);
   const [targetEditor, setTargetEditor] = useState<Editor<Target> | null>(null);
   const [scheduleEditor, setScheduleEditor] = useState<Editor<Schedule> | null>(null);
   const [exportOptionEditor, setExportOptionEditor] = useState<Editor<ExportOption> | null>(null);
   const [backupStrategyEditor, setBackupStrategyEditor] = useState<Editor<BackupStrategy> | null>(null);
   const [taskEditor, setTaskEditor] = useState<Editor<Task> | null>(null);
+  const [runTaskEditor, setRunTaskEditor] = useState<RunTaskEditor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -456,15 +459,25 @@ function Dashboard() {
     window.scrollTo({ top: 0 });
   };
 
-  const runTask = async (taskKey: string) => {
+  const openRunTask = (task: Task) => {
+    if (!cfg) return;
+    setError('');
+    setRunTaskEditor({ task, selectedTargetKeys: defaultRunTargetKeys(task, cfg.targets) });
+  };
+
+  const runTask = async (taskKey: string, targetKeys: string[]) => {
     setError('');
     setMessage(t('runningBackup'));
+    setRunningBackup(true);
     try {
-      await api('/api/backup/run', { method: 'POST', body: JSON.stringify({ task_key: taskKey }) });
+      await api('/api/backup/run', { method: 'POST', body: JSON.stringify({ task_key: taskKey, target_keys: targetKeys }) });
+      setRunTaskEditor(null);
       await load();
       setMessage(t('backupFinished'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('backupFailed'));
+    } finally {
+      setRunningBackup(false);
     }
   };
 
@@ -559,7 +572,7 @@ function Dashboard() {
           onAdd={() => setTaskEditor({ index: -1, value: defaultTask(cfg, t) })}
           onEdit={(task, index) => setTaskEditor({ index, value: cloneTask(task) })}
           onDelete={(index) => requestDelete('tasks', index)}
-          onRun={runTask}
+          onRun={openRunTask}
         />
       )
     },
@@ -683,6 +696,14 @@ function Dashboard() {
         onChange={setTaskEditor}
         onCancel={() => setTaskEditor(null)}
         onSave={upsertTask}
+      />
+      <RunTaskModal
+        editor={runTaskEditor}
+        targets={cfg.targets}
+        running={runningBackup}
+        onChange={setRunTaskEditor}
+        onCancel={() => setRunTaskEditor(null)}
+        onRun={runTask}
       />
       <ProfileModal
         open={profileModalOpen}
