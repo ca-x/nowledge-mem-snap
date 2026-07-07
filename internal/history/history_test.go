@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -19,8 +20,8 @@ func TestListNormalizesLegacyNullTargets(t *testing.T) {
 		}
 	})
 
-	startedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	payload := `{"id":"legacy","task_key":"task","task_name":"Task","source_key":"source","status":"success","object_name":"backup.zip","encrypted":false,"size_bytes":42,"started_at":"2026-01-02T03:04:05Z","targets":null}`
+	startedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	payload := fmt.Sprintf(`{"id":"legacy","task_key":"task","task_name":"Task","source_key":"source","status":"success","object_name":"backup.zip","encrypted":false,"size_bytes":42,"started_at":"%s","targets":null}`, startedAt.Format(time.RFC3339))
 	if err := client.RunRecord.Create().
 		SetTenant("tenant").
 		SetRunID("legacy").

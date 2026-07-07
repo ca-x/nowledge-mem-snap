@@ -234,23 +234,25 @@ export function RestoreWizard({ targets, sources, locale }: RestoreWizardProps) 
                 onReset={reset}
               />
             )}
-            <div className="restore-footer">
-              {activeIndex > 0 && activeStep !== 'progress' && (
-                <Button type="default" icon={<ChevronLeft size={16} />} onClick={() => goTo(activeIndex - 1)}>
-                  {t('previous')}
-                </Button>
-              )}
-              {activeIndex < 3 && (
-                <Button type="primary" icon={<ChevronRight size={16} />} disabled={!canMoveNext} onClick={() => goTo(activeIndex + 1)}>
-                  {t('next')}
-                </Button>
-              )}
-              {activeStep === 'options' && (
-                <Button type="primary" icon={<UploadCloud size={16} />} loading={starting} disabled={!canMoveNext || starting} onClick={startRestore}>
-                  {t('restoreStart')}
-                </Button>
-              )}
-            </div>
+            {activeStep !== 'progress' && (
+              <div className="restore-footer">
+                {activeIndex > 0 && (
+                  <Button type="default" icon={<ChevronLeft size={16} />} onClick={() => goTo(activeIndex - 1)}>
+                    {t('previous')}
+                  </Button>
+                )}
+                {activeIndex < 3 && (
+                  <Button type="primary" icon={<ChevronRight size={16} />} disabled={!canMoveNext} onClick={() => goTo(activeIndex + 1)}>
+                    {t('next')}
+                  </Button>
+                )}
+                {activeStep === 'options' && (
+                  <Button type="primary" icon={<UploadCloud size={16} />} loading={starting} disabled={!canMoveNext || starting} onClick={startRestore}>
+                    {t('restoreStart')}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
           <aside className="restore-aside">
             <RestoreSummary draft={draft} targets={targets} sources={sources} selectedObject={selectedObject} />

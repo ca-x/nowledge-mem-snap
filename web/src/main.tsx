@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Button, Card, Cursor, Input, Modal, Tabs, Tooltip } from 'animal-island-ui';
 import 'animal-island-ui/style';
@@ -246,6 +246,7 @@ function Dashboard() {
   const [runTaskEditor, setRunTaskEditor] = useState<RunTaskEditor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('sources');
 
@@ -277,6 +278,24 @@ function Dashboard() {
     const timer = window.setTimeout(() => setMessage(''), 4000);
     return () => window.clearTimeout(timer);
   }, [message]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setUserMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', closeOnPointerDown);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('pointerdown', closeOnPointerDown);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [userMenuOpen]);
 
   const persist = async (next: Config, successMessage: string) => {
     setSaving(true);
@@ -608,8 +627,16 @@ function Dashboard() {
         </div>
         <div className="topbar-actions">
           <LanguageSwitch />
-          <div className="user-menu">
-            <button className="user-menu-trigger" type="button" onClick={() => setUserMenuOpen((open) => !open)} aria-expanded={userMenuOpen}>
+          <div className="user-menu" ref={userMenuRef}>
+            <button
+              className="user-menu-trigger"
+              type="button"
+              onClick={() => setUserMenuOpen((open) => !open)}
+              aria-expanded={userMenuOpen}
+              aria-haspopup="menu"
+              aria-controls={userMenuOpen ? 'user-menu-popover' : undefined}
+              aria-label={t('profile')}
+            >
               <Avatar profile={profile} />
               <span className="user-menu-name">
                 <strong>{profile.display_name || profile.username}</strong>
@@ -618,9 +645,9 @@ function Dashboard() {
               <ChevronDown size={16} />
             </button>
             {userMenuOpen && (
-              <div className="user-menu-popover">
-                <Button type="default" icon={<UserRound size={16} />} onClick={() => { setProfileModalOpen(true); setUserMenuOpen(false); }}>{t('profile')}</Button>
-                <Button type="default" icon={<LogOut size={16} />} onClick={logout}>{t('logout')}</Button>
+              <div className="user-menu-popover" id="user-menu-popover" role="menu">
+                <Button role="menuitem" type="default" icon={<UserRound size={16} />} onClick={() => { setProfileModalOpen(true); setUserMenuOpen(false); }}>{t('profile')}</Button>
+                <Button role="menuitem" type="default" icon={<LogOut size={16} />} onClick={logout}>{t('logout')}</Button>
               </div>
             )}
           </div>
