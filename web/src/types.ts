@@ -178,6 +178,7 @@ export type Run = {
   object_name: string;
   encrypted: boolean;
   size_bytes: number;
+  error?: string;
   started_at: string;
   targets?: Array<{ target_name: string; status: string; bytes: number; retention_deleted?: number; error?: string }> | null;
 };

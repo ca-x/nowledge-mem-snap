@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +20,23 @@ import (
 	"github.com/ca-x/nowledge-mem-snap/internal/config"
 	"github.com/ca-x/nowledge-mem-snap/internal/storage"
 )
+
+type lockedBuffer struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.Write(data)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.String()
+}
 
 func TestListObjectsRejectsEmptyPrefix(t *testing.T) {
 	manager := newTestManager(afero.NewMemMapFs())
@@ -149,7 +167,7 @@ func TestRestoreWritesOperationLogsWithoutSecrets(t *testing.T) {
 	})
 	defer server.Close()
 
-	var logs bytes.Buffer
+	var logs lockedBuffer
 	manager := newTestManagerWithLogger(fs, slog.New(slog.NewJSONHandler(&logs, nil)))
 	job, err := manager.Start(context.Background(), StartRequest{
 		Tenant:             "tenant-1",

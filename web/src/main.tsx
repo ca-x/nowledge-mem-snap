@@ -489,10 +489,16 @@ function Dashboard() {
     setMessage(t('runningBackup'));
     setRunningBackup(true);
     try {
-      await api('/api/backup/run', { method: 'POST', body: JSON.stringify({ task_key: taskKey, target_keys: targetKeys }) });
+      const result = await api<{ run: Run; error?: string }>('/api/backup/run', { method: 'POST', body: JSON.stringify({ task_key: taskKey, target_keys: targetKeys }) });
       setRunTaskEditor(null);
       await load();
-      setMessage(t('backupFinished'));
+      if (result.run.status === 'failed') {
+        setActiveTab('runs');
+        setMessage('');
+        setError(result.run.error || result.error || t('backupFailed'));
+      } else {
+        setMessage(t('backupFinished'));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('backupFailed'));
     } finally {

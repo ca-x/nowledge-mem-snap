@@ -398,7 +398,7 @@ func (s *Server) handleRunBackup(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusAccepted, map[string]any{"run": run, "error": err.Error()})
+		writeJSON(w, http.StatusAccepted, map[string]any{"run": run, "error": run.Error})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": run})

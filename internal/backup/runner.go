@@ -94,12 +94,12 @@ func (r *Runner) run(ctx context.Context, task config.TaskConfig, trigger string
 	snap, err := r.exporter.Export(ctx, r.cfg, task)
 	if err != nil {
 		run.Status = "failed"
-		run.Error = err.Error()
+		run.Error = history.ErrorDetail(err)
 		now := time.Now().UTC()
 		run.FinishedAt = &now
 		_ = r.history.Append(run)
-		runLogger.Error("backup export failed", "error", err)
-		return run, err
+		runLogger.Error("backup export failed", "error", run.Error)
+		return run, errors.New(run.Error)
 	}
 	runLogger.Info("backup export finished", "bytes", snap.SizeBytes, "items", snap.ItemCount)
 
@@ -122,12 +122,12 @@ func (r *Runner) run(ctx context.Context, task config.TaskConfig, trigger string
 	})
 	if err != nil {
 		run.Status = "failed"
-		run.Error = err.Error()
+		run.Error = history.ErrorDetail(err)
 		now := time.Now().UTC()
 		run.FinishedAt = &now
 		_ = r.history.Append(run)
-		runLogger.Error("backup packaging failed", "encrypted", task.Encryption.Enabled, "error", err)
-		return run, err
+		runLogger.Error("backup packaging failed", "encrypted", task.Encryption.Enabled, "error", run.Error)
+		return run, errors.New(run.Error)
 	}
 
 	run.ObjectName = artifact.Name
@@ -185,8 +185,8 @@ func (r *Runner) run(ctx context.Context, task config.TaskConfig, trigger string
 			result.FinishedAt = time.Now().UTC()
 			if err != nil {
 				result.Status = "failed"
-				result.Error = err.Error()
-				targetLogger.Error("backup target failed", "object", artifact.Name, "error", err)
+				result.Error = history.ErrorDetail(err)
+				targetLogger.Error("backup target failed", "object", artifact.Name, "error", result.Error)
 			} else {
 				result.Status = "success"
 			}

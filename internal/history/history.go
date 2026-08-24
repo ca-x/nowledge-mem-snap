@@ -3,12 +3,28 @@ package history
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	mem "github.com/lib-x/nowledgemem-go"
+
 	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent"
 	"github.com/ca-x/nowledge-mem-snap/internal/persist/ent/runrecord"
+)
+
+const maxErrorDetailRunes = 4096
+
+var (
+	bearerTokenPattern     = regexp.MustCompile(`(?i)\bBearer\s+[^\s"',;]+`)
+	sensitiveHeaderPattern = regexp.MustCompile(`(?im)(["']?(?:authorization|cookies?|set-cookie)["']?\s*[=:]\s*).*$`)
+	sensitiveValuePattern  = regexp.MustCompile(`(?i)(["']?(?:api[\s_-]*key|access[\s_-]*key(?:[\s_-]*id)?|secret[\s_-]*access[\s_-]*key|token|password|secret|credentials?)["']?\s*[=:]\s*["']?)([^&\s"',;}]+)`)
+	urlUserInfoPattern     = regexp.MustCompile(`(?i)(https?://)[^/@\s"]+@`)
 )
 
 type Run struct {
@@ -84,6 +100,7 @@ func (s *Store) List() ([]Run, error) {
 		if run.Targets == nil {
 			run.Targets = []TargetResult{}
 		}
+		sanitizeRun(&run)
 		runs = append(runs, run)
 	}
 	return runs, nil
@@ -92,6 +109,8 @@ func (s *Store) List() ([]Run, error) {
 func (s *Store) Append(run Run) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	run.Targets = slices.Clone(run.Targets)
+	sanitizeRun(&run)
 	payload, err := json.Marshal(run)
 	if err != nil {
 		return err
@@ -117,6 +136,50 @@ func (s *Store) Append(run Run) error {
 		return err
 	}
 	return s.pruneLocked(ctx)
+}
+
+// SanitizeError removes common credential forms and bounds persisted error details.
+func SanitizeError(detail string) string {
+	detail = urlUserInfoPattern.ReplaceAllString(detail, "${1}[REDACTED]@")
+	detail = sensitiveHeaderPattern.ReplaceAllString(detail, "${1}[REDACTED]")
+	detail = bearerTokenPattern.ReplaceAllString(detail, "Bearer [REDACTED]")
+	detail = sensitiveValuePattern.ReplaceAllString(detail, "${1}[REDACTED]")
+	runes := []rune(detail)
+	if len(runes) > maxErrorDetailRunes {
+		detail = string(runes[:maxErrorDetailRunes]) + "…"
+	}
+	return detail
+}
+
+// ErrorDetail produces a safe, useful failure summary without persisting an
+// untrusted API response body.
+func ErrorDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	apiErr, ok := errors.AsType[*mem.APIError](err)
+	if !ok {
+		return SanitizeError(err.Error())
+	}
+
+	prefix, _ := strings.CutSuffix(err.Error(), apiErr.Error())
+	summary := "API request failed"
+	if apiErr.StatusCode > 0 {
+		summary = fmt.Sprintf("API request failed (status %d)", apiErr.StatusCode)
+	} else if apiErr.Status != "" {
+		summary = "API request failed (" + apiErr.Status + ")"
+	}
+	if len(apiErr.Detail) > 0 && apiErr.Detail[0].Msg != "" {
+		summary += ": " + apiErr.Detail[0].Msg
+	}
+	return SanitizeError(prefix + summary)
+}
+
+func sanitizeRun(run *Run) {
+	run.Error = SanitizeError(run.Error)
+	for i := range run.Targets {
+		run.Targets[i].Error = SanitizeError(run.Targets[i].Error)
+	}
 }
 
 func (s *Store) pruneLocked(ctx context.Context) error {

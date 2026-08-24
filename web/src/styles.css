@@ -1019,17 +1019,71 @@ code {
   margin-top: 12px;
 }
 
-.target-results span,
+.target-result,
 .test-result {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid rgba(196, 184, 158, 0.55);
   background: rgba(247, 243, 223, 0.78);
   font-size: 13px;
   font-weight: 800;
+}
+
+.target-result {
+  display: grid;
+  gap: 4px;
+  border-radius: 12px;
+}
+
+.target-result-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.target-result.failed {
+  border-color: rgba(224, 90, 90, 0.42);
+  background: rgba(224, 90, 90, 0.1);
+  color: var(--animal-error-active);
+}
+
+.target-error {
+  max-width: min(72ch, 100%);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.run-error-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(224, 90, 90, 0.42);
+  border-radius: 10px;
+  background: rgba(224, 90, 90, 0.1);
+  color: var(--animal-error-active);
+}
+
+.run-error-detail > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.run-error-detail strong {
+  font-size: 13px;
+}
+
+.run-error-detail p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .test-result.success {
