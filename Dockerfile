@@ -17,7 +17,11 @@ ARG TARGETARCH=amd64
 RUN apk add --no-cache ca-certificates git tzdata
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN for attempt in 1 2 3; do \
+      go mod download && break; \
+      if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+      sleep "$((attempt * 5))"; \
+    done
 COPY . .
 RUN go generate ./internal/persist/ent
 COPY --from=web-builder /src/web/dist ./web/dist
