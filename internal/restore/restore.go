@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path"
 	"strings"
 	"sync"
@@ -432,12 +433,27 @@ func newClient(source config.SourceConfig) *mem.Client {
 	}
 	opts := []mem.Option{
 		mem.WithBaseURL(source.NowledgeMem.APIURL),
+		mem.WithHTTPClient(&http.Client{
+			Transport: &importTransport{Transport: http.DefaultTransport.(*http.Transport).Clone()},
+		}),
 		mem.WithTimeout(timeout),
 	}
 	if source.NowledgeMem.APIKey != "" {
 		opts = append(opts, mem.WithAPIKey(source.NowledgeMem.APIKey))
 	}
 	return mem.NewClient(opts...)
+}
+
+type importTransport struct {
+	*http.Transport
+}
+
+func (transport *importTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.Method == http.MethodPost && strings.HasPrefix(request.Header.Get("Content-Type"), "multipart/form-data;") {
+		request = request.Clone(request.Context())
+		request.Header.Set("Expect", "100-continue")
+	}
+	return transport.Transport.RoundTrip(request)
 }
 
 func uploadRequest(data []byte, objectName string, opts ImportOptions) *mem.UploadImportRequest {

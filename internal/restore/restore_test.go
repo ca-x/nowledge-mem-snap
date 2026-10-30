@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	mem "github.com/lib-x/nowledgemem-go"
 	"github.com/spf13/afero"
 
 	"github.com/ca-x/nowledge-mem-snap/internal/archive"
@@ -118,7 +120,8 @@ func TestPlainZIPRestoreUploadsAndCompletes(t *testing.T) {
 
 func TestEncryptedRestoreDecryptsBeforeUpload(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	encrypted, err := archive.Encrypt([]byte("zip-data"), "secret", archive.Metadata{TaskKey: "task"})
+	body := strings.Repeat("zip-data", 256<<10)
+	encrypted, err := archive.Encrypt([]byte(body), "secret", archive.Metadata{TaskKey: "task"})
 	if err != nil {
 		t.Fatalf("Encrypt: %v", err)
 	}
@@ -127,7 +130,7 @@ func TestEncryptedRestoreDecryptsBeforeUpload(t *testing.T) {
 	}
 	server := newImportServer(t, importServerExpect{
 		filename: "export.zip",
-		body:     "zip-data",
+		body:     body,
 	})
 	defer server.Close()
 
@@ -148,6 +151,39 @@ func TestEncryptedRestoreDecryptsBeforeUpload(t *testing.T) {
 	}
 	if !got.Encrypted {
 		t.Fatal("job did not record encrypted source object")
+	}
+}
+
+func TestUploadWaitsForServerBeforeSendingArchive(t *testing.T) {
+	requests := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests <- request.Header.Get("Expect")
+		writer.Header().Set("Connection", "close")
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusRequestEntityTooLarge)
+		_, _ = io.WriteString(writer, `{"detail":"archive exceeds upload limit"}`)
+	}))
+	defer server.Close()
+
+	client := newClient(testSource(server.URL))
+	defer client.Close()
+	_, err := client.Data.UploadImport(t.Context(), uploadRequest(
+		bytes.Repeat([]byte("archive"), 1<<20), "export.zip.aes.json", ImportOptions{},
+	))
+	select {
+	case got := <-requests:
+		if got != "100-continue" {
+			t.Fatalf("Expect = %q, want 100-continue", got)
+		}
+	default:
+		t.Fatalf("upload did not reach server: %v", err)
+	}
+	apiErr, ok := errors.AsType[*mem.APIError](err)
+	if !ok || apiErr.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("upload error = %v, want API status 413", err)
+	}
+	if !strings.Contains(err.Error(), "archive exceeds upload limit") {
+		t.Fatalf("upload error lost server detail: %v", err)
 	}
 }
 

@@ -137,6 +137,7 @@ Remote restore uses the same saved S3/WebDAV/GCS/SFTP targets and Nowledge Mem A
 - Supported restore objects are portable `.zip` exports and encrypted `.zip.aes.json` packages created by this app.
 - Encrypted packages ask for the password only when starting the restore job; the password is not stored.
 - Import content flags and `mode` are sent to the Nowledge Mem Data Import API. The default mode is the API default; overwrite/clear-style modes are never selected by default.
+- Restore uploads use `Expect: 100-continue` so the destination can reject a request before the archive is sent. If uploading fails, check the destination/proxy logs, API credentials, upload size limits, and the source timeout. A failure at the uploading stage occurs after decryption; it does not indicate a wrong encryption password. Imports are not automatically retried, to avoid duplicate writes.
 
 Time semantics:
 
